@@ -1,9 +1,12 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
 
-from nltk.stem import PorterStemmer
-from nltk.stem import LancasterStemmer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+
+# from nltk.stem import PorterStemmer
+# from nltk.stem import LancasterStemmer
 
 ## Set paths
 cwd = Path.cwd()
@@ -23,29 +26,43 @@ NOTES['contents'] = NOTES['path'].apply(
     lambda x: Path(x).read_text()
 )
 
+# TODO: get rid of numbers, html code, url links etc. before fit transform vectorizer for TFIDF modeling
+patterns = [
+    "<div style='background-color: #62535D60; padding:5px; border-radius: 5px;'>\n\t<p></p>\n</div>\n\n>", 
+    "div",
+    "Shells",
+    "Tags"
+]
+regs = [
+    '(http|ftp|https):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])', #match url
+    '(\!\[(.*)\])', #match pictures encoded as ![picturename]
+    '(\$(.*)\$)', #match any LaTex so you can flatten it
+    '(\d\d:\d\d)'#match 00:00 time format to remove it
+]
+
 ## Build notes vector representattion table
-##
-## remove not meaningful patterns
-import re
 text = NOTES.loc[10]['contents'] 
-text
-nspans = [x.span() for x in re.finditer('\\n', text)]
-span1 = [x[0] for x in nspans]
-span2 = [x[1] for x in nspans]
-is_ = [x[0]-1 for x in nspans]
-ivals = [text[x] for x in is_]
+vectorizer3 = TfidfVectorizer(analyzer='word', ngram_range=(1, 2))
+X3 = vectorizer3.fit_transform([text])
+vectorizer3.get_feature_names_out()
 
-xy = [x for x in zip(span1, span2, is_, ivals)]
-X_MAP = pd.DataFrame(xy, columns=['s1', 's2', 'i', 'ival'])
 
-# TODO: need to find a way to efficiently insert characters 
-# in a string using numpy (represent str as a vector and
-# then replace items via vect operation)
-# then need to wrap it up to a func since i need tto do it again 
-# on other pattern (\t)
-# aftter that get rid of all \n and \t patterns in the text
-# then split text by ' ' and get rid of not meaningful tokens
-# then calc TFIDF for each token in a vector and build vector table
+
+# Useless functions:
+def pattern_indexes(pattern, document):
+    """Function scans for pattern addresses
+    POINTLESS xd
+    """
+    nspans = [x.span() for x in re.finditer('\\n', text)]
+    span1 = [x[0] for x in nspans]
+    span2 = [x[1] for x in nspans]
+    is_ = [x[0]-1 for x in nspans]
+    ivals = [text[x] for x in is_]
+
+    xy = [x for x in zip(span1, span2, is_, ivals)]
+    X_MAP = pd.DataFrame(xy, columns=['s1', 's2', 'i', 'ival'])
+
+    return X_MAP
 
 def insert_pat(string, index, pat):
     # Use this to insert ' ' under given address so you can
@@ -54,9 +71,3 @@ def insert_pat(string, index, pat):
 
 #testfunc
 print(insert_pat("355879ACB6", 5, ' FUCK '))
-
-
-#############################
-## data stemming
-#create an object of class PorterStemmer
-porter = PorterStemmer()
