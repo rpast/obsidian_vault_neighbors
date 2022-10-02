@@ -1,9 +1,17 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from pathlib import Path
 import re
+from sklearn import neighbors
 
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.neighbors import NearestNeighbors
+
+from sklearn.cluster import MiniBatchKMeans
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
 # from nltk.stem import PorterStemmer
 # from nltk.stem import LancasterStemmer
@@ -14,6 +22,7 @@ cwd = Path.cwd()
 vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
 vault_pth = Path(vault_str)
 
+print('parsing vault')
 ## Parse Obsidian Vault notes
 ## Catch notes paths
 notes_paths = [
@@ -27,10 +36,38 @@ NOTES['contents'] = NOTES['path'].apply(
     lambda x: Path(x).read_text(encoding='utf-8')
 )
 
-NOTES_bak = NOTES.copy()
+
 
 ## PREPROCESSING ##
 
+# Transform empty notes
+NOTES['contents'] = NOTES['contents'].str.strip()
+empty_f = (NOTES['contents']=='')
+NOTES['empty'] = np.nan
+NOTES.loc[empty_f, 'empty'] = True
+# For notes coming from shells use their stem as contents
+nonsh_f = (NOTES['empty'] == True) & \
+(NOTES['path'].apply(
+    lambda x: re.search(r"Shells", str(x)) == None
+    )
+)
+# filter out empty notes not from Shells folder
+NOTES_UPDT = NOTES[~nonsh_f].copy()
+
+
+# Remove the rest
+NOTES_UPDT.loc[empty_f, 'contents'] = (
+    NOTES_UPDT
+    ['path'].apply(
+        lambda x: x.stem
+    )
+)
+
+# Create backup dataframe for testing
+NOTES_bak = NOTES.copy()
+
+
+print('data preprocessing')
 pats = [
     # r"<div style='background-color: #62535D60; padding:5px; border-radius: 5px;'>\n\t<p></p>\n</div>\n\n>", 
     r"shells",
@@ -58,16 +95,16 @@ regurl = [r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)'] #match url
 
 # Text preprocessing
 
-NOTES['contents'] = (
-        NOTES['contents']
+NOTES_UPDT['contents'] = (
+        NOTES_UPDT['contents']
         .str.lower()
 )
 
 # Remove known not meaningful patterns
 def sub_patterns(patterns):
     for pattern in patterns:
-        NOTES['contents'] = (
-            NOTES['contents'].apply(
+        NOTES_UPDT['contents'] = (
+            NOTES_UPDT['contents'].apply(
                 lambda x: re.sub(pattern, ' ', fr'{x}')
             )
         )
@@ -82,8 +119,8 @@ escape = lambda s, escapechar, specialchars: "".join(
     escapechar + c if c in specialchars or c == escapechar else c for c in s
     )
 for chr_ in schars:
-    NOTES['contents'] = (
-        NOTES['contents'].apply(
+    NOTES_UPDT['contents'] = (
+        NOTES_UPDT['contents'].apply(
             lambda x: escape(x, '\\', chr_)
         )
     )
@@ -94,7 +131,7 @@ sub_patterns(regurl)
 
 ## test
 cont_test = pd.merge(
-    NOTES['contents'], 
+    NOTES_UPDT['contents'], 
     NOTES_bak['contents'], 
     left_index=True, 
     right_index=True, 
@@ -102,9 +139,9 @@ cont_test = pd.merge(
 )
 
 ########################################################
-
+print('building vector representation')
 ## Build notes vector representattion table
-text = NOTES['contents'] 
+text = NOTES_UPDT['contents'] 
 vectorizer = TfidfVectorizer(
     stop_words='english',
     max_df=0.99,
@@ -118,7 +155,7 @@ features = vectorizer.get_feature_names_out()
 
 
 ## Construct DF
-FNAMES = NOTES['path'].apply(lambda x: Path(x).stem)
+FNAMES = NOTES_UPDT['path'].apply(lambda x: Path(x).stem)
 MDF = pd.DataFrame(
     X.toarray(),
     columns=features,
@@ -126,29 +163,95 @@ MDF = pd.DataFrame(
 )
 
 
+## Find optimal number of clusters
+print('finding optimal clusters')
+def find_optimal_clusters(data, max_k):
+    iters = range(2, max_k+1, 2)
+    
+    sse = []
+    for k in iters:
+        sse.append(MiniBatchKMeans(
+            n_clusters=k, 
+            random_state=20
+        ).fit(data).inertia_)
+
+        print('Fit {} clusters'.format(k))
+        
+    f, ax = plt.subplots(1, 1)
+    ax.plot(iters, sse, marker='o')
+    ax.set_xlabel('Cluster Centers')
+    ax.set_xticks(iters)
+    ax.set_xticklabels(iters)
+    ax.set_ylabel('SSE')
+    ax.set_title('SSE by Cluster Center Plot')
+    f.show()
+    
+find_optimal_clusters(X, 20)
 
 
+## Clustering
+cl_n = input('How many clusters do you want to use?: ')
+clusters = MiniBatchKMeans(
+    n_clusters=int(cl_n), 
+    random_state=20
+).fit_predict(X)
 
-# Useless functions:
-def pattern_indexes(pattern, document):
-    """Function scans for pattern addresses
-    POINTLESS xd
-    """
-    nspans = [x.span() for x in re.finditer('\\n', text)]
-    span1 = [x[0] for x in nspans]
-    span2 = [x[1] for x in nspans]
-    is_ = [x[0]-1 for x in nspans]
-    ivals = [text[x] for x in is_]
 
-    xy = [x for x in zip(span1, span2, is_, ivals)]
-    X_MAP = pd.DataFrame(xy, columns=['s1', 's2', 'i', 'ival'])
+## NN algorithm
+print('find n nearest neighbors')
+X_d = X.todense()
+nbrs = NearestNeighbors(
+    n_neighbors=4, 
+    algorithm='kd_tree'
+).fit(X_d)
 
-    return X_MAP
+distances, indices = nbrs.kneighbors(X_d)
 
-def insert_pat(string, index, pat):
-    # Use this to insert ' ' under given address so you can
-    # split text into tokens for further pre-processing
-    return string[:index] + pat + string[index:]
 
-#testfunc
-print(insert_pat("355879ACB6", 5, ' FUCK '))
+## Interface for NN query
+def show_nn(index):
+    df_ = pd.DataFrame(indices)
+    nns = df_[df_[0] == index].values
+    return MDF.iloc[nns[0]]
+
+
+# ## Dim reduction and plotting
+# print('Formin TSNE plot')
+# def plot_tsne_pca(data, labels):
+#     max_label = max(labels)
+#     max_items = np.random.choice(range(data.shape[0]), size=50, replace=False)
+    
+#     pca = PCA(n_components=2).fit_transform(data[max_items,:].todense())
+#     tsne = TSNE().fit_transform(PCA(n_components=50).fit_transform(data[max_items,:].todense()))
+    
+    
+#     idx = np.random.choice(range(pca.shape[0]), size=5, replace=False)
+#     label_subset = labels[max_items]
+#     label_subset = [cm.hsv(i/max_label) for i in label_subset[idx]]
+    
+#     f, ax = plt.subplots(1, 2, figsize=(14, 6))
+    
+#     ax[0].scatter(pca[idx, 0], pca[idx, 1], c=label_subset)
+#     ax[0].set_title('PCA Cluster Plot')
+    
+#     ax[1].scatter(tsne[idx, 0], tsne[idx, 1], c=label_subset)
+#     ax[1].set_title('TSNE Cluster Plot')
+
+#     f.show()
+    
+# plot_tsne_pca(X, clusters)
+
+
+# # Getting top keywords
+# print('Getting top keywords')
+# def get_top_keywords(data, clusters, labels, n_terms):
+#     df = pd.DataFrame(data.todense()).groupby(clusters).mean()
+    
+#     for i,r in df.iterrows():
+#         print('\nCluster {}'.format(i))
+#         print(','.join([labels[t] for t in np.argsort(r)[-n_terms:]]))
+            
+# get_top_keywords(X, clusters, vectorizer.get_feature_names(), 10)
+
+
+print('TERMINATED')
