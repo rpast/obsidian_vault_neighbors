@@ -163,57 +163,71 @@ MDF = pd.DataFrame(
 )
 
 
-## Find optimal number of clusters
-print('finding optimal clusters')
-def find_optimal_clusters(data, max_k):
-    iters = range(2, max_k+1, 2)
+# ## Find optimal number of clusters
+# print('finding optimal clusters')
+# def find_optimal_clusters(data, max_k):
+#     iters = range(2, max_k+1, 2)
     
-    sse = []
-    for k in iters:
-        sse.append(MiniBatchKMeans(
-            n_clusters=k, 
-            random_state=20
-        ).fit(data).inertia_)
+#     sse = []
+#     for k in iters:
+#         sse.append(MiniBatchKMeans(
+#             n_clusters=k, 
+#             random_state=20
+#         ).fit(data).inertia_)
 
-        print('Fit {} clusters'.format(k))
+#         print('Fit {} clusters'.format(k))
         
-    f, ax = plt.subplots(1, 1)
-    ax.plot(iters, sse, marker='o')
-    ax.set_xlabel('Cluster Centers')
-    ax.set_xticks(iters)
-    ax.set_xticklabels(iters)
-    ax.set_ylabel('SSE')
-    ax.set_title('SSE by Cluster Center Plot')
-    f.show()
+#     f, ax = plt.subplots(1, 1)
+#     ax.plot(iters, sse, marker='o')
+#     ax.set_xlabel('Cluster Centers')
+#     ax.set_xticks(iters)
+#     ax.set_xticklabels(iters)
+#     ax.set_ylabel('SSE')
+#     ax.set_title('SSE by Cluster Center Plot')
+#     # f.show()
     
-find_optimal_clusters(X, 20)
+# find_optimal_clusters(X, 20)
 
 
-## Clustering
-cl_n = input('How many clusters do you want to use?: ')
-clusters = MiniBatchKMeans(
-    n_clusters=int(cl_n), 
-    random_state=20
-).fit_predict(X)
+# ## Clustering
+# cl_n = input('How many clusters do you want to use?: ')
+# clusters = MiniBatchKMeans(
+#     n_clusters=int(cl_n), 
+#     random_state=20
+# ).fit_predict(X)
 
 
 ## NN algorithm
 print('find n nearest neighbors')
 X_d = X.todense()
 nbrs = NearestNeighbors(
-    n_neighbors=4, 
-    algorithm='kd_tree'
+    n_neighbors=5, 
+    algorithm='brute',
+    metric='cosine'
 ).fit(X_d)
 
 distances, indices = nbrs.kneighbors(X_d)
 
 
 ## Interface for NN query
-def show_nn(index):
+def show_nn(index, dropna=False):
     df_ = pd.DataFrame(indices)
     nns = df_[df_[0] == index].values
-    return MDF.iloc[nns[0]]
+    sub_df = MDF.iloc[nns[0]].T
 
+    if dropna:
+        sub_df_s = (
+            sub_df
+            .replace(0, np.nan)
+            .dropna(how='all')
+        )
+        return sub_df_s
+    else:
+        return sub_df
+
+#TODO: come up with accuracy measurement (current graph edges vs recommended neighbors)
+#TODO: what is wrong with note 332?
+#TODO: sth wrong w regurl 
 
 # ## Dim reduction and plotting
 # print('Formin TSNE plot')
