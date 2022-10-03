@@ -16,10 +16,15 @@ from sklearn.manifold import TSNE
 # from nltk.stem import PorterStemmer
 # from nltk.stem import LancasterStemmer
 
+# pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 50)
+# pd.set_option('display.width', 1000)
+
+
 ## Set paths
 cwd = Path.cwd()
-# vault_str = '/home/nef/Documents/nefdocs/vault1'
-vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
+vault_str = '/home/nef/Documents/nefdocs/vault1'
+# vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
 vault_pth = Path(vault_str)
 
 print('parsing vault')
@@ -36,26 +41,32 @@ NOTES['contents'] = NOTES['path'].apply(
     lambda x: Path(x).read_text(encoding='utf-8')
 )
 
-
-
 ## PREPROCESSING ##
+print('data preprocessing')
 
 # Transform empty notes
-NOTES['contents'] = NOTES['contents'].str.strip()
-empty_f = (NOTES['contents']=='')
 NOTES['empty'] = np.nan
-NOTES.loc[empty_f, 'empty'] = True
-# For notes coming from shells use their stem as contents
+
+# Set filtering logic
+empty_f = (NOTES['contents']=='')
 nonsh_f = (NOTES['empty'] == True) & \
 (NOTES['path'].apply(
     lambda x: re.search(r"Shells", str(x)) == None
     )
 )
-# filter out empty notes not from Shells folder
+NOTES['title'] = NOTES['path'].apply(
+        lambda x: x.stem
+    )
+
+NOTES['contents'] = NOTES['contents'].str.strip()
+
+# Create helper feature
+NOTES.loc[empty_f, 'empty'] = True
+
+# Filter out empty notes not from Shells folder
 NOTES_UPDT = NOTES[~nonsh_f].copy()
 
-
-# Remove the rest
+# For notes coming from Shell folder -  use their stem as contents
 NOTES_UPDT.loc[empty_f, 'contents'] = (
     NOTES_UPDT
     ['path'].apply(
@@ -63,13 +74,11 @@ NOTES_UPDT.loc[empty_f, 'contents'] = (
     )
 )
 
-# Create backup dataframe for testing
+# Create backup dataframe for manual testing
 NOTES_bak = NOTES.copy()
 
-
-print('data preprocessing')
+# Tackle stop words/patterns
 pats = [
-    # r"<div style='background-color: #62535D60; padding:5px; border-radius: 5px;'>\n\t<p></p>\n</div>\n\n>", 
     r"shells",
     r"tags",
     r"date",
@@ -86,52 +95,63 @@ pats = [
     # r'(\$(.*)\$)', #match any LaTex so you can flatten it
     r'(\d\d:\d\d)',#match 00:00 time format to remove it 
     r'(\d\d\d\d\d\d)', #match date pattern 1
-    r'(\d\d-\d\d-\d\d)', #match dat attern 2
+    r'(\d\d-\d\d-\d\d)', #match dat pattern 2
     r'(\d\d)',
-    r'({.*})' #match special templat expressions
+    r'({.*})' #match special template expressions
 ]
-
 regurl = [r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)'] #match url
 
 # Text preprocessing
-
+NOTES_UPDT['contents'] = (
+    NOTES_UPDT
+    ['contents']
+    .str.strip()
+)
 NOTES_UPDT['contents'] = (
         NOTES_UPDT['contents']
         .str.lower()
 )
 
+# Step 1
 # Remove known not meaningful patterns
-def sub_patterns(patterns):
+def sub_patterns(patterns, field, df_):
+    """ Substitute passed patterns with ' '
+    """
     for pattern in patterns:
-        NOTES_UPDT['contents'] = (
-            NOTES_UPDT['contents'].apply(
+        df_[field] = (
+            df_[field].apply(
                 lambda x: re.sub(pattern, ' ', fr'{x}')
             )
         )
-sub_patterns(pats)
+    return df_
 
+NOTES_PROC = sub_patterns(pats, 'contents', NOTES_UPDT)
+
+# Step 2
 # Escape special chars so we can match urls
 schars = [
     ':',
     '/',
 ]
+
 escape = lambda s, escapechar, specialchars: "".join(
     escapechar + c if c in specialchars or c == escapechar else c for c in s
     )
-for chr_ in schars:
-    NOTES_UPDT['contents'] = (
-        NOTES_UPDT['contents'].apply(
-            lambda x: escape(x, '\\', chr_)
-        )
+
+
+NOTES_PROC['contents'] = (
+    NOTES_PROC['contents'].apply(
+        lambda x: escape(x, '\\', schars)
     )
+)
 
 ## remove urls now
-sub_patterns(regurl)
+sub_patterns(regurl, 'contents', NOTES_PROC)
 
-
-## test
+# Build table for manual testing of text preprocessing before
+# we model the data
 cont_test = pd.merge(
-    NOTES_UPDT['contents'], 
+    NOTES_PROC['contents'], 
     NOTES_bak['contents'], 
     left_index=True, 
     right_index=True, 
@@ -139,9 +159,12 @@ cont_test = pd.merge(
 )
 
 ########################################################
-print('building vector representation')
+## Model the documents with TFIDF approach
 ## Build notes vector representattion table
-text = NOTES_UPDT['contents'] 
+print('building vector representation')
+
+text = NOTES_PROC['contents'] 
+
 vectorizer = TfidfVectorizer(
     stop_words='english',
     max_df=0.99,
@@ -150,18 +173,65 @@ vectorizer = TfidfVectorizer(
     smooth_idf=True,
     analyzer='word', 
     ngram_range=(1, 4))
+
 X = vectorizer.fit_transform(text)
+
+# We will use features list later on to catch what tokens were taken 
+# into the TFIDF calculation
 features = vectorizer.get_feature_names_out()
 
 
 ## Construct DF
-FNAMES = NOTES_UPDT['path'].apply(lambda x: Path(x).stem)
 MDF = pd.DataFrame(
     X.toarray(),
     columns=features,
-    index=FNAMES
+    index=NOTES_PROC['title']
 )
 
+## Find nearest neighbors
+print('Find n nearest neighbors')
+X_d = X.todense()
+nbrs = NearestNeighbors(
+    n_neighbors=5, 
+    algorithm='brute',
+    metric='cosine'
+).fit(X_d)
+
+distances, indices = nbrs.kneighbors(X_d)
+
+## Interface for NN query
+def show_nn(index, dropna=False):
+    df_ = pd.DataFrame(indices)
+    nns = df_[df_[0] == index].values
+    sub_df = MDF.iloc[nns[0]].T
+
+    if dropna:
+        sub_df_s = (
+            sub_df
+            .replace(0, np.nan)
+            .dropna(how='all')
+        )
+        return sub_df_s
+    else:
+        return sub_df
+
+def find_index(df_, title):
+    return df_[df_['title']==title].index[0]
+
+
+#TODO: come up with accuracy measurement (current graph edges vs recommended neighbors)
+#TODO: what is wrong with note 332? Now it is 90
+# answer: there are tokens that are to common or rare to be taken in by 
+# vectorizer. This creates 'holes' in index list output from NN algorithm.
+#TODO: interface
+# Use name feature to query for index number
+# find nearest neighbors in model output by index number
+# use NOTES_UPD again to return nearest neighbors names
+
+
+#############################
+#### CLUSTERING PART TBC ####
+#############################
 
 # ## Find optimal number of clusters
 # print('finding optimal clusters')
@@ -195,39 +265,6 @@ MDF = pd.DataFrame(
 #     n_clusters=int(cl_n), 
 #     random_state=20
 # ).fit_predict(X)
-
-
-## NN algorithm
-print('find n nearest neighbors')
-X_d = X.todense()
-nbrs = NearestNeighbors(
-    n_neighbors=5, 
-    algorithm='brute',
-    metric='cosine'
-).fit(X_d)
-
-distances, indices = nbrs.kneighbors(X_d)
-
-
-## Interface for NN query
-def show_nn(index, dropna=False):
-    df_ = pd.DataFrame(indices)
-    nns = df_[df_[0] == index].values
-    sub_df = MDF.iloc[nns[0]].T
-
-    if dropna:
-        sub_df_s = (
-            sub_df
-            .replace(0, np.nan)
-            .dropna(how='all')
-        )
-        return sub_df_s
-    else:
-        return sub_df
-
-#TODO: come up with accuracy measurement (current graph edges vs recommended neighbors)
-#TODO: what is wrong with note 332?
-#TODO: sth wrong w regurl 
 
 # ## Dim reduction and plotting
 # print('Formin TSNE plot')
