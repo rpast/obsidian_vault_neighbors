@@ -55,7 +55,7 @@ nonsh_f = (NOTES['empty'] == True) & \
     )
 )
 NOTES['title'] = NOTES['path'].apply(
-        lambda x: x.stem
+        lambda x: x.stem.lower()
     )
 
 NOTES['contents'] = NOTES['contents'].str.strip()
@@ -200,9 +200,33 @@ nbrs = NearestNeighbors(
 distances, indices = nbrs.kneighbors(X_d)
 
 ## Interface for NN query
-def show_nn(index, dropna=False):
+def find_index(title):
+    """Helper function to extract index from master table using given note title
+
+    :param title: Obsidian note title
+    :type title: str
+    :return: index number corresponding to a given title
+    :rtype: int
+    """
+    t = title.lower()
+    return NOTES_PROC[NOTES_PROC['title']==t].index[0]
+
+def show_nn(note_title, dropna=False):
+    """Returns nearest neighbors dataframe for a given note. The table consists of neighbors titles, tokens used by the model and their corresponding TFIDF values. 
+    
+    :param note_title: title of the note for which user wants to extract nns
+    :type note_title: str
+    :param dropna: use this if you want to see only non-zero value tokens for at least one neighbor
+    :type dropna: bool
+    :returns: pd.DataFrame of nearest neighbors for given note title. First column represents a note for which nearest neighbors are calculated in the next columns.
+    """
+    
+    i = find_index(
+        note_title
+    )
+
     df_ = pd.DataFrame(indices)
-    nns = df_[df_[0] == index].values
+    nns = df_[df_[0] == i].values
     sub_df = MDF.iloc[nns[0]].T
 
     if dropna:
@@ -214,9 +238,6 @@ def show_nn(index, dropna=False):
         return sub_df_s
     else:
         return sub_df
-
-def find_index(df_, title):
-    return df_[df_['title']==title].index[0]
 
 
 #TODO: come up with accuracy measurement (current graph edges vs recommended neighbors)
