@@ -1,7 +1,16 @@
+# TODO:
+# 1. Write function that returns all outlinks for a given note
+# 2. Write function that compares outlinks with nns and spits out the score
+# 3. let user choose what folder names in the vault to exclude (txt file)
+# 4. let user choose how to treat empty notes (delete or fill)
+# 5. let user provide customized regex file for pattern removal
+# 6. implement it as script with arguments to be passed
+
+
+## SETUP
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
+
 from pathlib import Path
 import re
 from sklearn import neighbors
@@ -12,9 +21,6 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-
-# from nltk.stem import PorterStemmer
-# from nltk.stem import LancasterStemmer
 
 # pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 50)
@@ -27,58 +33,91 @@ vault_str = '/home/nef/Documents/nefdocs/vault1'
 # vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
 vault_pth = Path(vault_str)
 
-print('parsing vault')
-## Parse Obsidian Vault notes
-## Catch notes paths
-notes_paths = [
-    x for x in vault_pth.rglob('*') if x.suffix == '.md'
-]
+## READ VAULT
+def read_vault(pth, verbose=False):
+    """Reads .md files under given path
 
-## read each note
-NOTES = pd.DataFrame(notes_paths, columns=['path'])
-NOTES['contents'] = np.nan
-NOTES['contents'] = NOTES['path'].apply(
-    lambda x: Path(x).read_text(encoding='utf-8')
+    TODO: allow user to exclude folders
+    """
+    if verbose:
+        print(f'Parsing vault at {pth}')
+
+    notes_paths = [
+        x for x in vault_pth.rglob('*') if x.suffix == '.md'
+    ]
+
+    # read each note
+    notes = pd.DataFrame(
+        notes_paths, 
+        columns=['path']
+    )
+    notes['contents'] = np.nan
+    notes['contents'] = notes['path'].apply(
+        lambda x: Path(x).read_text(encoding='utf-8')
+    )
+
+    return notes
+
+NOTES = read_vault(
+    vault_pth
 )
 
 ## PREPROCESSING ##
-print('data preprocessing')
+def pre_process(df_, verbose=False):
+    """Initial data cleaning
+    """
+    if verbose:
+        print('Preprocessing notes')
 
-# Transform empty notes
-NOTES['empty'] = np.nan
+    # TODO: refactor it to option
+    # Transform empty notes
+    df_['empty'] = np.nan
 
-# Set filtering logic
-empty_f = (NOTES['contents']=='')
-nonsh_f = (NOTES['empty'] == True) & \
-(NOTES['path'].apply(
-    lambda x: re.search(r"Shells", str(x)) == None
+    # Set filtering logic
+    empty_f = (df_['contents']=='')
+    # Filtering out shells will go away in next iter
+    nonsh_f = (df_['empty'] == True) & \
+    (df_['path'].apply(
+        lambda x: re.search(r"Shells", str(x)) == None
+        )
     )
-)
-NOTES['title'] = NOTES['path'].apply(
-        lambda x: x.stem.lower()
+
+    # Create title feature
+    df_['title'] = df_['path'].apply(
+            lambda x: x.stem.lower()
+        )
+
+    # Make sure no trailinng whitespaces left behind
+    df_['contents'] = df_['contents'].str.strip()
+
+    # Create helper feature
+    df_.loc[empty_f, 'empty'] = True
+
+    # Filter out empty notes not from Shells folder
+    # will go away in next iter
+    df_updt = df_[~nonsh_f].copy()
+
+    # For notes coming from Shell folder -  use their stem as contents
+    df_updt.loc[empty_f, 'contents'] = (
+        df_updt
+        ['path'].apply(
+            lambda x: x.stem
+        )
     )
 
-NOTES['contents'] = NOTES['contents'].str.strip()
+    return df_updt
 
-# Create helper feature
-NOTES.loc[empty_f, 'empty'] = True
-
-# Filter out empty notes not from Shells folder
-NOTES_UPDT = NOTES[~nonsh_f].copy()
-
-# For notes coming from Shell folder -  use their stem as contents
-NOTES_UPDT.loc[empty_f, 'contents'] = (
-    NOTES_UPDT
-    ['path'].apply(
-        lambda x: x.stem
-    )
-)
 
 # Create backup dataframe for manual testing
-NOTES_bak = NOTES.copy()
+NOTES_upd = pre_process(
+    NOTES
+)
+NOTES_bak = NOTES_upd.copy()
 
 # Tackle stop words/patterns
 pats = [
+    r"2nd",
+    r"1st",
     r"shells",
     r"tags",
     r"date",
@@ -102,13 +141,13 @@ pats = [
 regurl = [r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)'] #match url
 
 # Text preprocessing
-NOTES_UPDT['contents'] = (
-    NOTES_UPDT
+NOTES_upd['contents'] = (
+    NOTES_upd
     ['contents']
     .str.strip()
 )
-NOTES_UPDT['contents'] = (
-        NOTES_UPDT['contents']
+NOTES_upd['contents'] = (
+        NOTES_upd['contents']
         .str.lower()
 )
 
@@ -125,7 +164,7 @@ def sub_patterns(patterns, field, df_):
         )
     return df_
 
-NOTES_PROC = sub_patterns(pats, 'contents', NOTES_UPDT)
+NOTES_PROC = sub_patterns(pats, 'contents', NOTES_upd)
 
 # Step 2
 # Escape special chars so we can match urls
@@ -211,7 +250,7 @@ def find_index(title):
     t = title.lower()
     return NOTES_PROC[NOTES_PROC['title']==t].index[0]
 
-def show_nn(note_title, dropna=False):
+def show_nn(note_title, dropna=False):       
     """Returns nearest neighbors dataframe for a given note. The table consists of neighbors titles, tokens used by the model and their corresponding TFIDF values. 
     
     :param note_title: title of the note for which user wants to extract nns
