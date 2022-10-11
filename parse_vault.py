@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 from sklearn import neighbors
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 
 from sklearn.cluster import MiniBatchKMeans
@@ -76,9 +76,9 @@ def pre_process(df_, verbose=False):
     # Set filtering logic
     empty_f = (df_['contents']=='')
     # Filtering out shells will go away in next iter
-    nonsh_f = (df_['empty'] == True) & \
+    nonsh_f = (df_['empty'] is True) & \
     (df_['path'].apply(
-        lambda x: re.search(r"Shells", str(x)) == None
+        lambda x: re.search(r"Shells", str(x)) is None
         )
     )
 
@@ -190,10 +190,10 @@ sub_patterns(regurl, 'contents', NOTES_PROC)
 # Build table for manual testing of text preprocessing before
 # we model the data
 cont_test = pd.merge(
-    NOTES_PROC['contents'], 
-    NOTES_bak['contents'], 
-    left_index=True, 
-    right_index=True, 
+    NOTES_PROC['contents'],
+    NOTES_bak['contents'],
+    left_index=True,
+    right_index=True,
     how='left'
 )
 
@@ -210,8 +210,16 @@ vectorizer = TfidfVectorizer(
     min_df=0.01,
     norm='l2',
     smooth_idf=True,
-    analyzer='word', 
-    ngram_range=(1, 4))
+    analyzer='word',
+    ngram_range=(1, 3)
+)
+
+# vectorizer = CountVectorizer(
+#     min_df=1,
+#     ngram_range=(1, 3),
+#     stop_words='english',
+#     binary=True
+# )
 
 X = vectorizer.fit_transform(text)
 
@@ -228,12 +236,15 @@ MDF = pd.DataFrame(
 )
 
 ## Find nearest neighbors
+n_number = 10
+
 print('Find n nearest neighbors')
 X_d = X.todense()
 nbrs = NearestNeighbors(
-    n_neighbors=5, 
+    n_neighbors=n_number+1, 
     algorithm='brute',
     metric='cosine'
+    # metric='jaccard'
 ).fit(X_d)
 
 distances, indices = nbrs.kneighbors(X_d)
