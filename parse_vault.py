@@ -8,11 +8,12 @@
 
 
 ## SETUP
+import re
+
 import pandas as pd
 import numpy as np
 
 from pathlib import Path
-import re
 from sklearn import neighbors
 
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -115,6 +116,7 @@ NOTES_upd = pre_process(
 NOTES_bak = NOTES_upd.copy()
 
 # Tackle stop words/patterns
+# TODO: allow user to switch outlinks on/off
 pats = [
     r"2nd",
     r"1st",
@@ -128,6 +130,7 @@ pats = [
     r"\t",
     r'__',
     r'_',
+    # r'\[\[.*\]\]', #drop obsidian forward links
     r'(<div.*div>)',
     r'(#\S+)', #remove tags,
     r'(\!\[(.*)\])', #remove anything encapsulated in ![ ]
@@ -159,7 +162,7 @@ def sub_patterns(patterns, field, df_):
     for pattern in patterns:
         df_[field] = (
             df_[field].apply(
-                lambda x: re.sub(pattern, ' ', fr'{x}')
+                lambda x: re.sub(pattern, ' ', f'{x}')
             )
         )
     return df_
@@ -207,7 +210,7 @@ text = NOTES_PROC['contents']
 vectorizer = TfidfVectorizer(
     stop_words='english',
     max_df=0.99,
-    min_df=0.01,
+    min_df=1,
     norm='l2',
     smooth_idf=True,
     analyzer='word',
@@ -241,7 +244,7 @@ n_number = 10
 print('Find n nearest neighbors')
 X_d = X.todense()
 nbrs = NearestNeighbors(
-    n_neighbors=n_number+1, 
+    n_neighbors=n_number+1,
     algorithm='brute',
     metric='cosine'
     # metric='jaccard'
