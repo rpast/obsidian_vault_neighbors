@@ -27,6 +27,9 @@ from sklearn.manifold import TSNE
 pd.set_option('display.max_columns', 50)
 # pd.set_option('display.width', 1000)
 
+## Global params
+ENCODING = 'utf-8'
+IGNORE_PTH = './nnignore.txt'
 
 ## Set paths
 cwd = Path.cwd()
@@ -35,6 +38,15 @@ vault_str = '/home/nef/Documents/nefdocs/vault1'
 vault_pth = Path(vault_str)
 
 ## READ VAULT
+def read_ignore(pth):
+    """Reads nnignore file if available
+    """
+    ignore_f = Path(pth)
+    if ignore_f.exists():
+        return ignore_f.read_text(encoding=ENCODING)
+    else:
+        return None
+
 def read_vault(pth, verbose=False):
     """Reads .md files under given path
 
@@ -58,6 +70,27 @@ def read_vault(pth, verbose=False):
     )
 
     return notes
+
+def filter_ignore(df_ , patterns):
+    indexes = []
+    df_['path_str'] = np.nan
+    df_['path_str'] = df_['path'].apply(
+        lambda x: str(x)
+    )
+    if type(patterns) == list:
+        for pat in patterns:
+            ignored = df_[df_['path_str'].str.contains(fr'{pat}', na=False)]
+            indexes.append(ignored.index.values)
+        indexes = [j for i in indexes for j in i]
+    elif type(patterns) == str:
+        ignored = df_[df_['path_str'].str.contains(fr'{patterns}', na=False)]
+        indexes.append(ignored.index.values)
+        
+    return indexes
+
+ILIST = read_ignore(
+    IGNORE_PTH
+)
 
 NOTES = read_vault(
     vault_pth
