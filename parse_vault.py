@@ -29,6 +29,7 @@ pd.set_option('display.max_columns', 50)
 
 ## Global params
 ENCODING = 'utf-8'
+DROP_EMPTY = False
 IGNORE_PTH = './nnignore.txt'
 
 ## Set paths
@@ -37,16 +38,7 @@ vault_str = '/home/nef/Documents/nefdocs/vault1'
 # vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
 vault_pth = Path(vault_str)
 
-## READ VAULT
-def read_ignore(pth):
-    """Reads nnignore file if available
-    """
-    ignore_f = Path(pth)
-    if ignore_f.exists():
-        return ignore_f.read_text(encoding=ENCODING)
-    else:
-        return None
-
+## READ DATA ##
 def read_vault(pth, verbose=False):
     """Reads .md files under given path
 
@@ -71,80 +63,104 @@ def read_vault(pth, verbose=False):
 
     return notes
 
+
+# Read .md files located under given vault location
+NOTES_DF = read_vault(
+    vault_pth
+)
+
+## PREPROCESSING ##
+def read_ignore(pth):
+    """Reads nnignore file if available
+    """
+    ignore_f = Path(pth)
+    if ignore_f.exists():
+        return ignore_f.read_text(encoding=ENCODING)
+    else:
+        return None
+
 def filter_ignore(df_ , patterns):
+    """Returns indexes of notes to ignore as per nnignore.txt
+    """
+
     indexes = []
     df_['path_str'] = np.nan
     df_['path_str'] = df_['path'].apply(
         lambda x: str(x)
     )
-    if type(patterns) == list:
+    if isinstance(patterns, list):
         for pat in patterns:
             ignored = df_[df_['path_str'].str.contains(fr'{pat}', na=False)]
             indexes.append(ignored.index.values)
         indexes = [j for i in indexes for j in i]
-    elif type(patterns) == str:
+    elif isinstance(patterns, str):
         ignored = df_[df_['path_str'].str.contains(fr'{patterns}', na=False)]
         indexes.append(ignored.index.values)
         
     return indexes
 
-ILIST = read_ignore(
+# Grab patterns for note ignore logic
+IGNORES = read_ignore(
     IGNORE_PTH
 )
 
-NOTES = read_vault(
-    vault_pth
+# Grab indexses to drop from dataframe
+ILIST = filter_ignore(
+    NOTES_DF,
+    IGNORES
 )
 
-## PREPROCESSING ##
+# Get rid of notes that contain path patterns from nnignore file
+NOTES_DF = NOTES_DF[~NOTES_DF.index.isin(ILIST[0])]
+
+
+# Handle empty notes
+def handle_empty(df_, drop_empty):
+    """Deals with empty notes in the dataset
+    """
+
+    # Make sure all empty notes have no trailing spaces
+    df_['contents'] = df_['contents'].str.strip()
+
+    # Set filter
+    empty_f = (df_['contents']=='')
+
+    if drop_empty:
+        df_ = df_[~empty_f]
+    else:
+        # Use stem as contents
+        df_.loc[empty_f, 'contents'] = (
+            df_
+            ['path'].apply(
+                lambda x: x.stem
+            )
+        )
+    
+    return df_
+
+NOTES_DF = handle_empty(
+    NOTES_DF,
+    DROP_EMPTY
+)
+
+
 def pre_process(df_, verbose=False):
     """Initial data cleaning
     """
     if verbose:
         print('Preprocessing notes')
 
-    # TODO: refactor it to option
-    # Transform empty notes
-    df_['empty'] = np.nan
-
-    # Set filtering logic
-    empty_f = (df_['contents']=='')
-    # Filtering out shells will go away in next iter
-    nonsh_f = (df_['empty'] is True) & \
-    (df_['path'].apply(
-        lambda x: re.search(r"Shells", str(x)) is None
-        )
-    )
 
     # Create title feature
     df_['title'] = df_['path'].apply(
             lambda x: x.stem.lower()
         )
-
-    # Make sure no trailinng whitespaces left behind
-    df_['contents'] = df_['contents'].str.strip()
-
-    # Create helper feature
-    df_.loc[empty_f, 'empty'] = True
-
-    # Filter out empty notes not from Shells folder
-    # will go away in next iter
-    df_updt = df_[~nonsh_f].copy()
-
-    # For notes coming from Shell folder -  use their stem as contents
-    df_updt.loc[empty_f, 'contents'] = (
-        df_updt
-        ['path'].apply(
-            lambda x: x.stem
-        )
-    )
-
-    return df_updt
-
+    
+    return df_
 
 # Create backup dataframe for manual testing
 NOTES_upd = pre_process(
-    NOTES
+    NOTES_DF
 )
 NOTES_bak = NOTES_upd.copy()
 
