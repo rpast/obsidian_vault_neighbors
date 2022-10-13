@@ -1,0 +1,25 @@
+#Pattern prunning is applied in order specified in this file
+
+(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)' #match regular url
+(https\:\/\/docs.+\) #match google docs url in (...)
+2nd
+1st
+shells
+tags
+date
+links
+source
+todo
+\n
+\t
+__
+_
+\[\[.*\]\] #drop obsidian forward links
+(<div.*div>)
+(#\S+) #remove tags
+(\!\[(.*)\]) #remove anything encapsulated in ![ ]
+(\d\d:\d\d) #match 00:00 time format to remove it 
+(\d\d\d\d\d\d) #match date pattern 1
+(\d\d-\d\d-\d\d) #match dat pattern 2
+(\d\d) #any two digits
+({.*}) #match special template expressions

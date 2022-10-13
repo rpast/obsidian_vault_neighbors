@@ -53,7 +53,7 @@ def read_vault(pth, verbose=False):
 
     # read each note
     notes = pd.DataFrame(
-        notes_paths, 
+        notes_paths,
         columns=['path']
     )
     notes['contents'] = np.nan
@@ -70,8 +70,8 @@ NOTES_DF = read_vault(
 )
 
 ## PREPROCESSING ##
-def read_ignore(pth):
-    """Reads nnignore file if available
+def read_txt(pth):
+    """Reads txt file if available
     """
     ignore_f = Path(pth)
     if ignore_f.exists():
@@ -83,24 +83,26 @@ def filter_ignore(df_ , patterns):
     """Returns indexes of notes to ignore as per nnignore.txt
     """
 
+    subdf_ = df_.copy()
+
     indexes = []
-    df_['path_str'] = np.nan
-    df_['path_str'] = df_['path'].apply(
+    subdf_['path_str'] = np.nan
+    subdf_['path_str'] = subdf_['path'].apply(
         lambda x: str(x)
     )
     if isinstance(patterns, list):
         for pat in patterns:
-            ignored = df_[df_['path_str'].str.contains(fr'{pat}', na=False)]
+            ignored = subdf_[subdf_['path_str'].str.contains(fr'{pat}', na=False)]
             indexes.append(ignored.index.values)
         indexes = [j for i in indexes for j in i]
     elif isinstance(patterns, str):
-        ignored = df_[df_['path_str'].str.contains(fr'{patterns}', na=False)]
+        ignored = subdf_[subdf_['path_str'].str.contains(fr'{patterns}', na=False)]
         indexes.append(ignored.index.values)
-        
+
     return indexes
 
 # Grab patterns for note ignore logic
-IGNORES = read_ignore(
+IGNORES = read_txt(
     IGNORE_PTH
 )
 
@@ -144,29 +146,53 @@ NOTES_DF = handle_empty(
 )
 
 
-def pre_process(df_, verbose=False):
-    """Initial data cleaning
+def get_titles(df_):
+    """Create a title feature
     """
-    if verbose:
-        print('Preprocessing notes')
-
-
-    # Create title feature
     df_['title'] = df_['path'].apply(
             lambda x: x.stem.lower()
         )
-    
     return df_
 
 # Create backup dataframe for manual testing
-NOTES_upd = pre_process(
+NOTES_DF = get_titles(
     NOTES_DF
 )
-NOTES_bak = NOTES_upd.copy()
 
 # Tackle stop words/patterns
+# Create a copy of a dataframe to process further with regex
+NOTES_REG_DF = NOTES_DF.copy()
 # TODO: allow user to switch outlinks on/off
+
+# Escape special chars so we can match urls
+# schars = [
+#     ':',
+#     '/',
+# ]
+
+# escape = lambda s, escapechar, specialchars: "".join(
+#     escapechar + c if c in specialchars or c == escapechar else c for c in s
+#     )
+
+
+# NOTES_REG_DF['contents'] = (
+#     NOTES_REG_DF['contents'].apply(
+#         lambda x: escape(x, '\\', schars)
+#     )
+# )
+
+##Implementation of pattern.txt file
+PATTERNS = read_txt('./nnpatterns.txt')
+
+#Prune patterns and transform them to a list
+# (?<=\#)(.*?)(?=\\n) #get rid of comments
+# \# get rid of remaining hash symbols
+# split data on \n pattern 
+# inspect items in a resulting list
+
 pats = [
+    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)', #match regular url
+    r'(https\:\/\/docs.+\)', #match google docs url in (...)
     r"2nd",
     r"1st",
     r"shells",
@@ -183,23 +209,22 @@ pats = [
     r'(<div.*div>)',
     r'(#\S+)', #remove tags,
     r'(\!\[(.*)\])', #remove anything encapsulated in ![ ]
-    # r'(\$(.*)\$)', #match any LaTex so you can flatten it
     r'(\d\d:\d\d)',#match 00:00 time format to remove it 
     r'(\d\d\d\d\d\d)', #match date pattern 1
     r'(\d\d-\d\d-\d\d)', #match dat pattern 2
-    r'(\d\d)',
+    r'(\d\d)', #any two digits
     r'({.*})' #match special template expressions
 ]
-regurl = [r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)'] #match url
+
 
 # Text preprocessing
-NOTES_upd['contents'] = (
-    NOTES_upd
+NOTES_REG_DF['contents'] = (
+    NOTES_REG_DF
     ['contents']
     .str.strip()
 )
-NOTES_upd['contents'] = (
-        NOTES_upd['contents']
+NOTES_REG_DF['contents'] = (
+        NOTES_REG_DF['contents']
         .str.lower()
 )
 
@@ -216,34 +241,16 @@ def sub_patterns(patterns, field, df_):
         )
     return df_
 
-NOTES_PROC = sub_patterns(pats, 'contents', NOTES_upd)
-
-# Step 2
-# Escape special chars so we can match urls
-schars = [
-    ':',
-    '/',
-]
-
-escape = lambda s, escapechar, specialchars: "".join(
-    escapechar + c if c in specialchars or c == escapechar else c for c in s
-    )
-
-
-NOTES_PROC['contents'] = (
-    NOTES_PROC['contents'].apply(
-        lambda x: escape(x, '\\', schars)
-    )
-)
+NOTES_PROC = sub_patterns(pats, 'contents', NOTES_REG_DF)
 
 ## remove urls now
-sub_patterns(regurl, 'contents', NOTES_PROC)
+# sub_patterns(regurl, 'contents', NOTES_PROC)
 
 # Build table for manual testing of text preprocessing before
 # we model the data
 cont_test = pd.merge(
     NOTES_PROC['contents'],
-    NOTES_bak['contents'],
+    NOTES_DF['contents'],
     left_index=True,
     right_index=True,
     how='left'
