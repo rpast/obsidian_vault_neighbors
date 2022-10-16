@@ -7,7 +7,7 @@
 # 6. implement it as script with arguments to be passed
 
 
-## SETUP
+# SETUP
 import re
 
 import pandas as pd
@@ -27,18 +27,19 @@ from sklearn.manifold import TSNE
 pd.set_option('display.max_columns', 50)
 # pd.set_option('display.width', 1000)
 
-## Global params
+# Global params
 ENCODING = 'utf-8'
 DROP_EMPTY = False
 IGNORE_PTH = './nnignore.txt'
 
-## Set paths
+# Set paths
 cwd = Path.cwd()
 vault_str = '/home/nef/Documents/nefdocs/vault1'
 # vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
 vault_pth = Path(vault_str)
 
-## READ DATA ##
+
+# READ DATA ##
 def read_vault(pth, verbose=False):
     """Reads .md files under given path
 
@@ -69,7 +70,8 @@ NOTES_DF = read_vault(
     vault_pth
 )
 
-## PREPROCESSING ##
+
+# PREPROCESSING ##
 def read_txt(pth):
     """Reads txt file if available
     """
@@ -79,7 +81,8 @@ def read_txt(pth):
     else:
         return None
 
-def filter_ignore(df_ , patterns):
+
+def filter_ignore(df_, patterns):
     """Returns indexes of notes to ignore as per nnignore.txt
     """
 
@@ -92,14 +95,19 @@ def filter_ignore(df_ , patterns):
     )
     if isinstance(patterns, list):
         for pat in patterns:
-            ignored = subdf_[subdf_['path_str'].str.contains(fr'{pat}', na=False)]
+            ignored = (subdf_
+                       [subdf_['path_str'].str.contains(fr'{pat}', na=False)])
             indexes.append(ignored.index.values)
         indexes = [j for i in indexes for j in i]
     elif isinstance(patterns, str):
-        ignored = subdf_[subdf_['path_str'].str.contains(fr'{patterns}', na=False)]
+        ignored = (
+            subdf_
+            [subdf_['path_str'].str.contains(fr'{patterns}', na=False)]
+        )
         indexes.append(ignored.index.values)
 
     return indexes
+
 
 # Grab patterns for note ignore logic
 IGNORES = read_txt(
@@ -125,7 +133,7 @@ def handle_empty(df_, drop_empty):
     df_['contents'] = df_['contents'].str.strip()
 
     # Set filter
-    empty_f = (df_['contents']=='')
+    empty_f = (df_['contents'] == '')
 
     if drop_empty:
         df_ = df_[~empty_f]
@@ -137,8 +145,9 @@ def handle_empty(df_, drop_empty):
                 lambda x: x.stem
             )
         )
-    
+
     return df_
+
 
 NOTES_DF = handle_empty(
     NOTES_DF,
@@ -153,6 +162,7 @@ def get_titles(df_):
             lambda x: x.stem.lower()
         )
     return df_
+
 
 # Create backup dataframe for manual testing
 NOTES_DF = get_titles(
@@ -181,18 +191,18 @@ NOTES_REG_DF = NOTES_DF.copy()
 #     )
 # )
 
-##Implementation of pattern.txt file
+# Implementation of pattern.txt file
 PATTERNS = read_txt('./nnpatterns.txt')
 
-#Prune patterns and transform them to a list
+# Prune patterns and transform them to a list
 # (?<=\#)(.*?)(?=\\n) #get rid of comments
 # \# get rid of remaining hash symbols
 # split data on \n pattern 
 # inspect items in a resulting list
 
 pats = [
-    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)', #match regular url
-    r'(https\:\/\/docs.+\)', #match google docs url in (...)
+    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)',  # match regular url
+    r'(https\:\/\/docs.+\)',  # match google docs url in (...)
     r"2nd",
     r"1st",
     r"shells",
@@ -207,13 +217,13 @@ pats = [
     r'_',
     # r'\[\[.*\]\]', #drop obsidian forward links
     r'(<div.*div>)',
-    r'(#\S+)', #remove tags,
-    r'(\!\[(.*)\])', #remove anything encapsulated in ![ ]
-    r'(\d\d:\d\d)',#match 00:00 time format to remove it 
-    r'(\d\d\d\d\d\d)', #match date pattern 1
-    r'(\d\d-\d\d-\d\d)', #match dat pattern 2
-    r'(\d\d)', #any two digits
-    r'({.*})' #match special template expressions
+    r'(#\S+)',  # remove tags,
+    r'(\!\[(.*)\])',  # remove anything encapsulated in ![ ]
+    r'(\d\d:\d\d)',  # match 00:00 time format to remove it 
+    r'(\d\d\d\d\d\d)',  # match date pattern 1
+    r'(\d\d-\d\d-\d\d)',  # match dat pattern 2
+    r'(\d\d)',  # any two digits
+    r'({.*})'  # match special template expressions
 ]
 
 
@@ -228,6 +238,7 @@ NOTES_REG_DF['contents'] = (
         .str.lower()
 )
 
+
 # Step 1
 # Remove known not meaningful patterns
 def sub_patterns(patterns, field, df_):
@@ -241,9 +252,10 @@ def sub_patterns(patterns, field, df_):
         )
     return df_
 
+
 NOTES_PROC = sub_patterns(pats, 'contents', NOTES_REG_DF)
 
-## remove urls now
+# remove urls now
 # sub_patterns(regurl, 'contents', NOTES_PROC)
 
 # Build table for manual testing of text preprocessing before
@@ -257,8 +269,8 @@ cont_test = pd.merge(
 )
 
 ########################################################
-## Model the documents with TFIDF approach
-## Build notes vector representattion table
+# Model the documents with TFIDF approach
+# Build notes vector representattion table
 print('building vector representation')
 
 text = NOTES_PROC['contents'] 
@@ -287,14 +299,14 @@ X = vectorizer.fit_transform(text)
 features = vectorizer.get_feature_names_out()
 
 
-## Construct DF
+# Construct DF
 MDF = pd.DataFrame(
     X.toarray(),
     columns=features,
     index=NOTES_PROC['title']
 )
 
-## Find nearest neighbors
+# Find nearest neighbors
 n_number = 10
 
 print('Find n nearest neighbors')
@@ -308,7 +320,9 @@ nbrs = NearestNeighbors(
 
 distances, indices = nbrs.kneighbors(X_d)
 
-## Interface for NN query
+# Interface for NN query
+
+
 def find_index(title):
     """Helper function to extract index from master table using given note title
 
