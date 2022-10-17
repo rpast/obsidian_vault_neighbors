@@ -1,10 +1,14 @@
 # TODO:
+# TEST:
 # 1. Write function that returns all outlinks for a given note
 # 2. Write function that compares outlinks with nns and spits out the score
-# 3. let user choose what folder names in the vault to exclude (txt file)
-# 4. let user choose how to treat empty notes (delete or fill)
-# 5. let user provide customized regex file for pattern removal
+# 3. let user choose what folder names in the vault to exclude [DONE]
+# 4. let user choose how to treat empty notes (delete or fill) [DONE]
+# 5. let user provide customized regex file for pattern removal [DONE]
 # 6. implement it as script with arguments to be passed
+# 7. if nighbor already a link then skip
+# 8. show quantified distance between notes
+# 9. allow user to specify distance measuer (cosine, jaccard)
 
 
 # SETUP
@@ -30,7 +34,9 @@ pd.set_option('display.max_columns', 50)
 # Global params
 ENCODING = 'utf-8'
 DROP_EMPTY = False
+DROP_OLINKS = False
 IGNORE_PTH = './nnignore.txt'
+PATTERN_PTH = './nnpatterns.txt'
 
 # Set paths
 cwd = Path.cwd()
@@ -164,35 +170,30 @@ def get_titles(df_):
     return df_
 
 
+# Text preprocessing
+NOTES_DF['contents'] = (
+    NOTES_DF
+    ['contents']
+    .str.strip()
+)
+NOTES_DF['contents'] = (
+        NOTES_DF['contents']
+        .str.lower()
+)
+
+
 # Create backup dataframe for manual testing
 NOTES_DF = get_titles(
     NOTES_DF
 )
 
+
 # Tackle stop words/patterns
 # Create a copy of a dataframe to process further with regex
 NOTES_REG_DF = NOTES_DF.copy()
-# TODO: allow user to switch outlinks on/off
-
-# Escape special chars so we can match urls
-# schars = [
-#     ':',
-#     '/',
-# ]
-
-# escape = lambda s, escapechar, specialchars: "".join(
-#     escapechar + c if c in specialchars or c == escapechar else c for c in s
-#     )
-
-
-# NOTES_REG_DF['contents'] = (
-#     NOTES_REG_DF['contents'].apply(
-#         lambda x: escape(x, '\\', schars)
-#     )
-# )
 
 # Implementation of pattern.txt file
-PATTERNS = read_txt('./nnpatterns.txt')
+PATTERNS = read_txt(PATTERN_PTH)
 
 
 def prep_patterns(patterns):
@@ -208,47 +209,16 @@ def prep_patterns(patterns):
 
 pats = prep_patterns(PATTERNS)
 
-
-#pats = [
-#    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)',  # match regular url
-#    r'(\(https\:\/\/docs.+\))',  # match google docs url in (...)
-#    r"2nd",
-#    r"1st",
-#    r"shells",
-#    r"tags",
-#    r"date",
-#    r"links",
-#    r"source",
-#    r"todo",
-#    r"\n",
-#    r"\t",
-#    r'__',
-#    r'_',
-#    # r'\[\[.*\]\]', #drop obsidian forward links
-#    r'(<div.*div>)',
-#    r'(#\S+)',  # remove tags,
-#    r'(\!\[(.*)\])',  # remove anything encapsulated in ![ ]
-#    r'(\d\d:\d\d)',  # match 00:00 time format to remove it
-#    r'(\d\d\d\d\d\d)',  # match date pattern 1
-#    r'(\d\d-\d\d-\d\d)',  # match dat pattern 2
-#    r'(\d\d)',  # any two digits
-#    r'({.*})'  # match special template expressions
-#]
+# If user specifies so, drop outgoing links from the note so they are not
+# taken into account in finding nearest neighbors
+# TODO: put that into prep_patterns()
+if DROP_OLINKS:
+    OLINK_PAT = r'\[\[.*\]\]'
+    pats.append(OLINK_PAT)
+    assert OLINK_PAT in pats
 
 
-# Text preprocessing
-NOTES_REG_DF['contents'] = (
-    NOTES_REG_DF
-    ['contents']
-    .str.strip()
-)
-NOTES_REG_DF['contents'] = (
-        NOTES_REG_DF['contents']
-        .str.lower()
-)
-
-
-# Step 1
+# Regex pattern matching and cleaning
 # Remove known not meaningful patterns
 def sub_patterns(patterns, field, df_):
     """ Substitute passed patterns with ' '
@@ -264,11 +234,9 @@ def sub_patterns(patterns, field, df_):
 
 NOTES_PROC = sub_patterns(pats, 'contents', NOTES_REG_DF)
 
-# remove urls now
-# sub_patterns(regurl, 'contents', NOTES_PROC)
 
 # Build table for manual testing of text preprocessing before
-# we model the data
+# we model the data - FOR TESTS
 cont_test = pd.merge(
     NOTES_PROC['contents'],
     NOTES_DF['contents'],
@@ -276,6 +244,7 @@ cont_test = pd.merge(
     right_index=True,
     how='left'
 )
+
 
 ########################################################
 # Model the documents with TFIDF approach
@@ -319,7 +288,9 @@ MDF = pd.DataFrame(
 N_NUMBER = 10
 
 print('Find n nearest neighbors')
+
 X_d = X.todense()
+X_d = np.asarray(X_d)
 nbrs = NearestNeighbors(
     n_neighbors=N_NUMBER+1,
     algorithm='brute',
