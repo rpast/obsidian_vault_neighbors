@@ -194,37 +194,46 @@ NOTES_REG_DF = NOTES_DF.copy()
 # Implementation of pattern.txt file
 PATTERNS = read_txt('./nnpatterns.txt')
 
-# Prune patterns and transform them to a list
-# (?<=\#)(.*?)(?=\\n) #get rid of comments
-# \# get rid of remaining hash symbols
-# split data on \n pattern 
-# inspect items in a resulting list
 
-pats = [
-    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)',  # match regular url
-    r'(https\:\/\/docs.+\)',  # match google docs url in (...)
-    r"2nd",
-    r"1st",
-    r"shells",
-    r"tags",
-    r"date",
-    r"links",
-    r"source",
-    r"todo",
-    r"\n",
-    r"\t",
-    r'__',
-    r'_',
-    # r'\[\[.*\]\]', #drop obsidian forward links
-    r'(<div.*div>)',
-    r'(#\S+)',  # remove tags,
-    r'(\!\[(.*)\])',  # remove anything encapsulated in ![ ]
-    r'(\d\d:\d\d)',  # match 00:00 time format to remove it 
-    r'(\d\d\d\d\d\d)',  # match date pattern 1
-    r'(\d\d-\d\d-\d\d)',  # match dat pattern 2
-    r'(\d\d)',  # any two digits
-    r'({.*})'  # match special template expressions
-]
+def prep_patterns(patterns):
+    """Transforms patterns txt file into a Python list
+
+    """
+    reg = '\\n'
+    patterns_sub = re.sub(reg, ' ', patterns)
+    pats = patterns_sub.split(' ')
+    pats = [x for x in pats if x != '']
+    return pats
+
+
+pats = prep_patterns(PATTERNS)
+
+
+#pats = [
+#    r'(\S+\.(com|net|org|edu|gov|pl|eu|de)(\/\S+)?)',  # match regular url
+#    r'(\(https\:\/\/docs.+\))',  # match google docs url in (...)
+#    r"2nd",
+#    r"1st",
+#    r"shells",
+#    r"tags",
+#    r"date",
+#    r"links",
+#    r"source",
+#    r"todo",
+#    r"\n",
+#    r"\t",
+#    r'__',
+#    r'_',
+#    # r'\[\[.*\]\]', #drop obsidian forward links
+#    r'(<div.*div>)',
+#    r'(#\S+)',  # remove tags,
+#    r'(\!\[(.*)\])',  # remove anything encapsulated in ![ ]
+#    r'(\d\d:\d\d)',  # match 00:00 time format to remove it
+#    r'(\d\d\d\d\d\d)',  # match date pattern 1
+#    r'(\d\d-\d\d-\d\d)',  # match dat pattern 2
+#    r'(\d\d)',  # any two digits
+#    r'({.*})'  # match special template expressions
+#]
 
 
 # Text preprocessing
@@ -273,7 +282,7 @@ cont_test = pd.merge(
 # Build notes vector representattion table
 print('building vector representation')
 
-text = NOTES_PROC['contents'] 
+text = NOTES_PROC['contents']
 
 vectorizer = TfidfVectorizer(
     stop_words='english',
@@ -294,7 +303,7 @@ vectorizer = TfidfVectorizer(
 
 X = vectorizer.fit_transform(text)
 
-# We will use features list later on to catch what tokens were taken 
+# We will use features list later on to catch what tokens were taken
 # into the TFIDF calculation
 features = vectorizer.get_feature_names_out()
 
@@ -307,12 +316,12 @@ MDF = pd.DataFrame(
 )
 
 # Find nearest neighbors
-n_number = 10
+N_NUMBER = 10
 
 print('Find n nearest neighbors')
 X_d = X.todense()
 nbrs = NearestNeighbors(
-    n_neighbors=n_number+1,
+    n_neighbors=N_NUMBER+1,
     algorithm='brute',
     metric='cosine'
     # metric='jaccard'
@@ -331,19 +340,25 @@ def find_index(title):
     :return: index number corresponding to a given title
     :rtype: int
     """
-    t = title.lower()
-    return NOTES_PROC[NOTES_PROC['title']==t].index[0]
+    tit = title.lower()
+    return NOTES_PROC[NOTES_PROC['title'] == tit].index[0]
 
-def show_nn(note_title, dropna=False):       
-    """Returns nearest neighbors dataframe for a given note. The table consists of neighbors titles, tokens used by the model and their corresponding TFIDF values. 
-    
+
+def show_nn(note_title, dropna=False):
+    """Returns nearest neighbors dataframe for a given note. The table consists
+    of neighbors titles, tokens used by the model and their corresponding
+    TFIDF values.
+
     :param note_title: title of the note for which user wants to extract nns
     :type note_title: str
-    :param dropna: use this if you want to see only non-zero value tokens for at least one neighbor
+    :param dropna: use this if you want to see only non-zero value tokens for
+    at least one neighbor
     :type dropna: bool
-    :returns: pd.DataFrame of nearest neighbors for given note title. First column represents a note for which nearest neighbors are calculated in the next columns.
+    :returns: pd.DataFrame of nearest neighbors for given note title. First
+    column represents a note for which nearest neighbors are calculated in the
+    next columns.
     """
-    
+
     i = find_index(
         note_title
     )
@@ -359,38 +374,39 @@ def show_nn(note_title, dropna=False):
             .dropna(how='all')
         )
         return sub_df_s
-    else:
-        return sub_df
+
+    return sub_df
 
 
-#TODO: come up with accuracy measurement (current graph edges vs recommended neighbors)
-#TODO: what is wrong with note 332? Now it is 90
-# answer: there are tokens that are to common or rare to be taken in by 
+# TODO: come up with accuracy measurement
+# (current graph edges vs recommended neighbors)
+# TODO: what is wrong with note 332? Now it is 90
+# answer: there are tokens that are to common or rare to be taken in by
 # vectorizer. This creates 'holes' in index list output from NN algorithm.
-#TODO: interface
+# TODO: interface
 # Use name feature to query for index number
 # find nearest neighbors in model output by index number
 # use NOTES_UPD again to return nearest neighbors names
 
 
-#############################
-#### CLUSTERING PART TBC ####
-#############################
+#######################
+# CLUSTERING PART TBC #
+#######################
 
 # ## Find optimal number of clusters
 # print('finding optimal clusters')
 # def find_optimal_clusters(data, max_k):
 #     iters = range(2, max_k+1, 2)
-    
+
 #     sse = []
 #     for k in iters:
 #         sse.append(MiniBatchKMeans(
-#             n_clusters=k, 
+#             n_clusters=k,
 #             random_state=20
 #         ).fit(data).inertia_)
 
 #         print('Fit {} clusters'.format(k))
-        
+
 #     f, ax = plt.subplots(1, 1)
 #     ax.plot(iters, sse, marker='o')
 #     ax.set_xlabel('Cluster Centers')
@@ -399,14 +415,14 @@ def show_nn(note_title, dropna=False):
 #     ax.set_ylabel('SSE')
 #     ax.set_title('SSE by Cluster Center Plot')
 #     # f.show()
-    
+
 # find_optimal_clusters(X, 20)
 
 
 # ## Clustering
 # cl_n = input('How many clusters do you want to use?: ')
 # clusters = MiniBatchKMeans(
-#     n_clusters=int(cl_n), 
+#     n_clusters=int(cl_n),
 #     random_state=20
 # ).fit_predict(X)
 
@@ -414,26 +430,27 @@ def show_nn(note_title, dropna=False):
 # print('Formin TSNE plot')
 # def plot_tsne_pca(data, labels):
 #     max_label = max(labels)
-#     max_items = np.random.choice(range(data.shape[0]), size=50, replace=False)
-    
+#     max_items = np.random.choice(
+# range(data.shape[0]), size=50, replace=False)
+
 #     pca = PCA(n_components=2).fit_transform(data[max_items,:].todense())
-#     tsne = TSNE().fit_transform(PCA(n_components=50).fit_transform(data[max_items,:].todense()))
-    
-    
+#     tsne = TSNE().fit_transform(
+# PCA(n_components=50).fit_transform(data[max_items,:].todense()))
+
 #     idx = np.random.choice(range(pca.shape[0]), size=5, replace=False)
 #     label_subset = labels[max_items]
 #     label_subset = [cm.hsv(i/max_label) for i in label_subset[idx]]
-    
+
 #     f, ax = plt.subplots(1, 2, figsize=(14, 6))
-    
+
 #     ax[0].scatter(pca[idx, 0], pca[idx, 1], c=label_subset)
 #     ax[0].set_title('PCA Cluster Plot')
-    
+
 #     ax[1].scatter(tsne[idx, 0], tsne[idx, 1], c=label_subset)
 #     ax[1].set_title('TSNE Cluster Plot')
 
 #     f.show()
-    
+
 # plot_tsne_pca(X, clusters)
 
 
@@ -441,11 +458,11 @@ def show_nn(note_title, dropna=False):
 # print('Getting top keywords')
 # def get_top_keywords(data, clusters, labels, n_terms):
 #     df = pd.DataFrame(data.todense()).groupby(clusters).mean()
-    
+
 #     for i,r in df.iterrows():
 #         print('\nCluster {}'.format(i))
 #         print(','.join([labels[t] for t in np.argsort(r)[-n_terms:]]))
-            
+
 # get_top_keywords(X, clusters, vectorizer.get_feature_names(), 10)
 
 
