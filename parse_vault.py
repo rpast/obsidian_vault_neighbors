@@ -38,8 +38,7 @@ N_NUMBER = 10
 
 # Set paths
 cwd = Path.cwd()
-vault_str = '/home/nef/Documents/nefdocs/vault1'
-# vault_str = r'C:\\Users\\Rafal\\Documents\\vault1'
+vault_str = input('Provide absolute path to the vault: ')
 vault_pth = Path(vault_str)
 
 

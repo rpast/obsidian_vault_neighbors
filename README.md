@@ -1,6 +1,6 @@
 # Obsidian Vault Neighbors
-### Note recommendation script
- 
+## Semantic links recommendation script
+<br>
 Obsidian.md is an open source knowledge management software. As its creators describe
 it: "Obsidian is a powerful and extensible knowledge base that works on top of your 
 local folder of plain text files."
@@ -8,9 +8,13 @@ The Obsidian allows for forward and back-links as a way of connection between no
 This method produces a graph. It can be traversed by users in search of further 
 meaningful connections. The quality of semantic edges in the graph is dictated by 
 the judgement of the user.
+<br>
 
+If you want to learn more about the Obsidian, check: [Obsidian.md](obsidian.md)
+<br>
+* An example of cluttered Obsidian graph (~500 notes)
 
-If you want to learn more about the Obsidian tool, check: [Obsidian.md](obsidian.md)
+<img src="graph_example.png" alt="graph" width="500"/>
 
 
 ## Objective
