@@ -1,31 +1,27 @@
 # TODO:
-# TEST:
-# 1. Write function that returns all outlinks for a given note
-# 2. Write function that compares outlinks with nns and spits out the score
+
+# 0. Accuracy measurement (current graph edges vs recommended neighbors)
+# 1.    Write function that returns all outlinks for a given note
+# 2.    Write function that compares outlinks with nns and spits out the score
 # 3. let user choose what folder names in the vault to exclude [DONE]
 # 4. let user choose how to treat empty notes (delete or fill) [DONE]
 # 5. let user provide customized regex file for pattern removal [DONE]
-# 6. implement it as script with arguments to be passed
-# 7. if nighbor already a link then skip
+# 6. implement argparse
+# 7. if neighbor already a link then skip [DONE - drop out links functionality]
 # 8. show quantified distance between notes
-# 9. allow user to specify distance measuer (cosine, jaccard)
+# 9. allow user to specify distance measure (cosine, jaccard) [DONE]
 
 
 # SETUP
 import re
 
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 
-from pathlib import Path
-from sklearn import neighbors
-
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.neighbors import NearestNeighbors
-
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 
 # pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 50)
@@ -37,6 +33,8 @@ DROP_EMPTY = False
 DROP_OLINKS = False
 IGNORE_PTH = './nnignore.txt'
 PATTERN_PTH = './nnpatterns.txt'
+DISTANCE = 'jaccard'
+N_NUMBER = 10
 
 # Set paths
 cwd = Path.cwd()
@@ -80,16 +78,20 @@ NOTES_DF = read_vault(
 # PREPROCESSING ##
 def read_txt(pth):
     """Reads txt file if available
+
     """
+
     ignore_f = Path(pth)
+
     if ignore_f.exists():
         return ignore_f.read_text(encoding=ENCODING)
-    else:
-        return None
+
+    return None
 
 
 def filter_ignore(df_, patterns):
     """Returns indexes of notes to ignore as per nnignore.txt
+
     """
 
     subdf_ = df_.copy()
@@ -163,10 +165,13 @@ NOTES_DF = handle_empty(
 
 def get_titles(df_):
     """Create a title feature
+
     """
+
     df_['title'] = df_['path'].apply(
             lambda x: x.stem.lower()
         )
+
     return df_
 
 
@@ -236,7 +241,6 @@ NOTES_PROC = sub_patterns(pats, 'contents', NOTES_REG_DF)
 
 
 # Build table for manual testing of text preprocessing before
-# we model the data - FOR TESTS
 cont_test = pd.merge(
     NOTES_PROC['contents'],
     NOTES_DF['contents'],
@@ -246,63 +250,119 @@ cont_test = pd.merge(
 )
 
 
-########################################################
-# Model the documents with TFIDF approach
-# Build notes vector representattion table
+############################################
+# Model                                    #
+# Build notes vector representattion table #
 print('building vector representation')
 
 text = NOTES_PROC['contents']
 
-vectorizer = TfidfVectorizer(
-    stop_words='english',
-    max_df=0.99,
-    min_df=1,
-    norm='l2',
-    smooth_idf=True,
-    analyzer='word',
-    ngram_range=(1, 3)
-)
+STOP_WORDS = 'english'
+MAX_DF = 0.99
+MIN_DF = 1
+NORM = 'l2'
+NGRAM_RANGE = (1, 3)
 
-# vectorizer = CountVectorizer(
-#     min_df=1,
-#     ngram_range=(1, 3),
-#     stop_words='english',
-#     binary=True
-# )
 
+def tfidf_vec(swords, mxdf, midf, nrm, nrange):
+    """ TfidfVectorizer instatiate 
+
+    """
+    vectorizer = TfidfVectorizer(
+        stop_words=swords,
+        max_df=mxdf,
+        min_df=midf,
+        norm=nrm,
+        smooth_idf=True,
+        analyzer='word',
+        ngram_range=nrange
+    )
+
+    return vectorizer
+
+
+def count_vec(midf, nrange):
+    """ CountVectorizer instatiate
+
+    """
+    vectorizer = CountVectorizer(
+        min_df=midf,
+        ngram_range=nrange,
+        stop_words='english',
+        binary=True
+     )
+
+    return vectorizer
+
+
+# Vectorizer depends on the distance method user wants to use
+if DISTANCE == 'cosine':
+    vectorizer = tfidf_vec(
+        STOP_WORDS,
+        MAX_DF,
+        MIN_DF,
+        NORM,
+        NGRAM_RANGE
+    )
+elif DISTANCE == 'jaccard':
+    vectorizer = count_vec(
+        MIN_DF,
+        NGRAM_RANGE
+    )
+else:
+    raise TypeError("Distance not recognized. Use: cosine ,jaccard")
+
+
+# Vectorize documents and processing
 X = vectorizer.fit_transform(text)
+X_d = X.todense()
+X_d = np.asarray(X_d)
+if DISTANCE == 'jaccard':
+     X_d = np.array(X_d, dtype=bool)
+
 
 # We will use features list later on to catch what tokens were taken
-# into the TFIDF calculation
-features = vectorizer.get_feature_names_out()
+# into the calculation
+FEATURES = vectorizer.get_feature_names_out()
 
 
-# Construct DF
+# Construct helper DF
 MDF = pd.DataFrame(
     X.toarray(),
-    columns=features,
+    columns=FEATURES,
     index=NOTES_PROC['title']
 )
 
-# Find nearest neighbors
-N_NUMBER = 10
 
+# Find nearest neighbors
 print('Find n nearest neighbors')
 
-X_d = X.todense()
-X_d = np.asarray(X_d)
-nbrs = NearestNeighbors(
-    n_neighbors=N_NUMBER+1,
-    algorithm='brute',
-    metric='cosine'
-    # metric='jaccard'
-).fit(X_d)
 
-distances, indices = nbrs.kneighbors(X_d)
+def calc_neighbors(metric, nnum, data):
+    """ wrap NearestNeighbors with given distance metric
+
+    """
+
+    nbrs = NearestNeighbors(
+        n_neighbors=nnum+1,
+        algorithm='brute',
+        metric=metric
+    ).fit(data)
+
+    return nbrs
+
+
+NBRS = calc_neighbors(
+    DISTANCE,
+    N_NUMBER,
+    X_d
+)
+
+# Grab quantified distances for given indices
+distances, indices = NBRS.kneighbors(X_d)
+
 
 # Interface for NN query
-
-
 def find_index(title):
     """Helper function to extract index from master table using given note title
 
@@ -317,8 +377,7 @@ def find_index(title):
 
 def show_nn(note_title, dropna=False):
     """Returns nearest neighbors dataframe for a given note. The table consists
-    of neighbors titles, tokens used by the model and their corresponding
-    TFIDF values.
+    of neighbors titles, tokens used by the model and their corresponding values.
 
     :param note_title: title of the note for which user wants to extract nns
     :type note_title: str
@@ -347,17 +406,6 @@ def show_nn(note_title, dropna=False):
         return sub_df_s
 
     return sub_df
-
-
-# TODO: come up with accuracy measurement
-# (current graph edges vs recommended neighbors)
-# TODO: what is wrong with note 332? Now it is 90
-# answer: there are tokens that are to common or rare to be taken in by
-# vectorizer. This creates 'holes' in index list output from NN algorithm.
-# TODO: interface
-# Use name feature to query for index number
-# find nearest neighbors in model output by index number
-# use NOTES_UPD again to return nearest neighbors names
 
 
 #######################
