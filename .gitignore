@@ -1,4 +1,4 @@
+nnpath.txt
 data/
 case_study_sklearn/
-
-nnpath.txt
+*.swp
