@@ -33,13 +33,9 @@ DROP_EMPTY = False
 DROP_OLINKS = False
 IGNORE_PTH = './nnignore.txt'
 PATTERN_PTH = './nnpatterns.txt'
+V_PATH = './nnpath.txt'
 DISTANCE = 'jaccard'
 N_NUMBER = 10
-
-# Set paths
-cwd = Path.cwd()
-vault_str = input('Provide absolute path to the vault: ')
-vault_pth = Path(vault_str)
 
 
 # READ DATA ##
@@ -52,7 +48,7 @@ def read_vault(pth, verbose=False):
         print(f'Parsing vault at {pth}')
 
     notes_paths = [
-        x for x in vault_pth.rglob('*') if x.suffix == '.md'
+        x for x in VAULT_PTH.rglob('*') if x.suffix == '.md'
     ]
 
     # read each note
@@ -68,14 +64,8 @@ def read_vault(pth, verbose=False):
     return notes
 
 
-# Read .md files located under given vault location
-NOTES_DF = read_vault(
-    vault_pth
-)
-
-
 # PREPROCESSING ##
-def read_txt(pth):
+def read_txt(pth, enc):
     """Reads txt file if available
 
     """
@@ -83,9 +73,20 @@ def read_txt(pth):
     ignore_f = Path(pth)
 
     if ignore_f.exists():
-        return ignore_f.read_text(encoding=ENCODING)
+        return ignore_f.read_text(encoding=enc)
 
     return None
+
+
+def prep_patterns(patterns):
+    """Transforms patterns txt file into a Python list
+
+    """
+    reg = '\\n'
+    patterns_sub = re.sub(reg, ' ', patterns)
+    pats = patterns_sub.split(' ')
+    pats = [x for x in pats if x != '']
+    return pats
 
 
 def filter_ignore(df_, patterns):
@@ -116,9 +117,34 @@ def filter_ignore(df_, patterns):
     return indexes
 
 
+# Set paths
+# Read vault path file. If no path defined, then ask user to provide it.
+VP = read_txt(
+    V_PATH,
+    ENCODING
+)
+if VP is None:
+    print('nnpath.txt not found\n')
+    VAULT_STR = input('Provide absolute path to the vault: ')
+    VAULT_PTH = Path(VAULT_STR)
+else:
+    VP = prep_patterns(VP)
+    if len(VP) != 1:
+        print('nnpath.txt is content is ambiguous\n')
+        VAULT_STR = input('Provide absolute path to the vault: ')
+        VAULT_PTH = Path(VAULT_STR)
+    else:
+        VAULT_PTH = Path(VP[0])
+
+# Read .md files located under given vault location
+NOTES_DF = read_vault(
+    VAULT_PTH
+)
+
 # Grab patterns for note ignore logic
 IGNORES = read_txt(
-    IGNORE_PTH
+    IGNORE_PTH,
+    ENCODING
 )
 
 # Grab indexses to drop from dataframe
@@ -197,18 +223,7 @@ NOTES_DF = get_titles(
 NOTES_REG_DF = NOTES_DF.copy()
 
 # Implementation of pattern.txt file
-PATTERNS = read_txt(PATTERN_PTH)
-
-
-def prep_patterns(patterns):
-    """Transforms patterns txt file into a Python list
-
-    """
-    reg = '\\n'
-    patterns_sub = re.sub(reg, ' ', patterns)
-    pats = patterns_sub.split(' ')
-    pats = [x for x in pats if x != '']
-    return pats
+PATTERNS = read_txt(PATTERN_PTH, ENCODING)
 
 
 pats = prep_patterns(PATTERNS)
