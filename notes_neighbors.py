@@ -1,19 +1,12 @@
 # TODO:
-
-# 0. Accuracy measurement (current graph edges vs recommended neighbors)
+# Accuracy measurement (current graph edges vs recommended neighbors)
 # 1.    Write function that returns all outlinks for a given note
 # 2.    Write function that compares outlinks with nns and spits out the score
-# 3. let user choose what folder names in the vault to exclude [DONE]
-# 4. let user choose how to treat empty notes (delete or fill) [DONE]
-# 5. let user provide customized regex file for pattern removal [DONE]
-# 6. implement argparse
-# 7. if neighbor already a link then skip [DONE - drop out links functionality]
-# 8. show quantified distance between notes
-# 9. allow user to specify distance measure (cosine, jaccard) [DONE]
+# show quantified distance between notes
+# return message if note not found
 
-
-# SETUP
 import re
+import argparse
 
 from pathlib import Path
 
@@ -27,15 +20,103 @@ from sklearn.neighbors import NearestNeighbors
 pd.set_option('display.max_columns', 50)
 # pd.set_option('display.width', 1000)
 
+# Global parametrisation
+PARSER = argparse.ArgumentParser()
+# add optional script arguments
+
+enc = 'utf-8'
+de = False
+do = False
+ipth = './nnignore.txt'
+ppth = './nnpatterns.txt'
+vpth = './nnpath.txt'
+dist = 'jaccard'
+nn = 10
+verb = False
+t = None
+
+PARSER.add_argument(
+    '-e', '--encoding',
+    help='Set encoding for vault notes. Default \'utf-8\'',
+    type=str,
+    default=enc
+)
+PARSER.add_argument(
+    '-de', '--drop_empty',
+    help='Drop empty notes instead of filling them in with titles',
+    action='store_true',
+    default=de
+)
+PARSER.add_argument(
+    '-do', '--drop_outlinks',
+    help='Dont take outlinks into the nearest neighbors analysis',
+    action='store_true',
+    default=do
+)
+PARSER.add_argument(
+    '-ip', '--ignore_path',
+    help='Set path to nnignore.txt file. Default ./',
+    type=str,
+    default=ipth
+)
+PARSER.add_argument(
+    '-pp', '--pattern_path',
+    help='Set path to nnpatterns.txt. Default ./',
+    type=str,
+    default=ppth
+)
+PARSER.add_argument(
+    '-vp', '--vault_path',
+    help='Set path to nnpath.txt. Default ./',
+    type=str,
+    default=vpth
+)
+PARSER.add_argument(
+    '-mt', '--metric',
+    help='Set distance metric for NN algorithm. Default \'jaccard\'. Available metrics: jaccard, cosine.',
+    type=str,
+    default=dist
+)
+PARSER.add_argument(
+    '-nn', '--neighbors_number',
+    help='Set nearest neighbors number the script should return. Default 10.',
+    type=int,
+    default=nn
+)
+PARSER.add_argument(
+    '-v', '--verbose',
+    help='Make script output more verbose',
+    action='store_true',
+    default=verb
+)
+PARSER.add_argument(
+    '-t', '--title',
+    help='Pass full note title for which you want to get nearest neighbors',
+    type=str,
+    default=t
+)
+
+ARGS = PARSER.parse_args()
+
 # Global params
-ENCODING = 'utf-8'
-DROP_EMPTY = False
-DROP_OLINKS = False
-IGNORE_PTH = './nnignore.txt'
-PATTERN_PTH = './nnpatterns.txt'
-V_PATH = './nnpath.txt'
-DISTANCE = 'jaccard'
-N_NUMBER = 10
+NOTE_TITLE =ARGS.title
+
+ENCODING = ARGS.encoding
+DROP_EMPTY = ARGS.drop_empty
+DROP_OLINKS = ARGS.drop_outlinks
+IGNORE_PTH = ARGS.ignore_path
+PATTERN_PTH = ARGS.pattern_path
+V_PATH = ARGS.vault_path
+DISTANCE = ARGS.metric
+N_NUMBER = ARGS.neighbors_number
+VERBOSE = ARGS.verbose
+
+PARM_CONTAINER = [ENCODING, DROP_EMPTY, DROP_OLINKS, IGNORE_PTH, PATTERN_PTH,
+                  V_PATH, DISTANCE, N_NUMBER, VERBOSE]
+if VERBOSE:
+    print('Global parameters:')
+    print(PARM_CONTAINER)
+    print('\n')
 
 
 # READ DATA ##
@@ -65,34 +146,45 @@ def read_vault(pth, verbose=False):
 
 
 # PREPROCESSING ##
-def read_txt(pth, enc):
+def read_txt(pth, enc, v):
     """Reads txt file if available
 
     """
 
-    ignore_f = Path(pth)
+    if v:
+        print(f'Reading text file under {pth}')
 
-    if ignore_f.exists():
-        return ignore_f.read_text(encoding=enc)
+    f_ = Path(pth)
+
+    if f_.exists():
+        return f_.read_text(encoding=enc)
 
     return None
 
 
-def prep_patterns(patterns):
+def prep_patterns(patterns, v):
     """Transforms patterns txt file into a Python list
 
     """
+
+    if v:
+        print('Cleaning txt patterns')
+
     reg = '\\n'
     patterns_sub = re.sub(reg, ' ', patterns)
     pats = patterns_sub.split(' ')
     pats = [x for x in pats if x != '']
+
     return pats
 
 
-def filter_ignore(df_, patterns):
+def filter_ignore(df_, patterns, v):
     """Returns indexes of notes to ignore as per nnignore.txt
 
     """
+
+    if v:
+        print(f'Filtering out notes under ignored locations: {patterns}')
 
     subdf_ = df_.copy()
 
@@ -117,18 +209,25 @@ def filter_ignore(df_, patterns):
     return indexes
 
 
+if VERBOSE:
+    print('### Notes recommendation script run. ###')
+
 # Set paths
 # Read vault path file. If no path defined, then ask user to provide it.
 VP = read_txt(
     V_PATH,
-    ENCODING
+    ENCODING,
+    VERBOSE
 )
 if VP is None:
     print('nnpath.txt not found\n')
     VAULT_STR = input('Provide absolute path to the vault: ')
     VAULT_PTH = Path(VAULT_STR)
 else:
-    VP = prep_patterns(VP)
+    VP = prep_patterns(
+        VP,
+        VERBOSE
+    )
     if len(VP) != 1:
         print('nnpath.txt is content is ambiguous\n')
         VAULT_STR = input('Provide absolute path to the vault: ')
@@ -138,19 +237,22 @@ else:
 
 # Read .md files located under given vault location
 NOTES_DF = read_vault(
-    VAULT_PTH
+    VAULT_PTH,
+    verbose=VERBOSE
 )
 
 # Grab patterns for note ignore logic
 IGNORES = read_txt(
     IGNORE_PTH,
-    ENCODING
+    ENCODING,
+    VERBOSE
 )
 
 # Grab indexses to drop from dataframe
 ILIST = filter_ignore(
     NOTES_DF,
-    IGNORES
+    IGNORES,
+    VERBOSE
 )
 
 # Get rid of notes that contain path patterns from nnignore file
@@ -158,9 +260,13 @@ NOTES_DF = NOTES_DF[~NOTES_DF.index.isin(ILIST[0])]
 
 
 # Handle empty notes
-def handle_empty(df_, drop_empty):
+def handle_empty(df_, drop_empty, v):
     """Deals with empty notes in the dataset
+
     """
+
+    if v:
+        print(f'Handling empty notes. Drop empty = {drop_empty}')
 
     # Make sure all empty notes have no trailing spaces
     df_['contents'] = df_['contents'].str.strip()
@@ -184,14 +290,20 @@ def handle_empty(df_, drop_empty):
 
 NOTES_DF = handle_empty(
     NOTES_DF,
-    DROP_EMPTY
+    DROP_EMPTY,
+    VERBOSE
 )
+# Make sure the index is increasing monotonicaly
+NOTES_DF = NOTES_DF.reset_index(drop=True)
 
 
-def get_titles(df_):
+def get_titles(df_, v):
     """Create a title feature
 
     """
+
+    if v:
+        print('Preparing notes titles')
 
     df_['title'] = df_['path'].apply(
             lambda x: x.stem.lower()
@@ -212,21 +324,26 @@ NOTES_DF['contents'] = (
 )
 
 
-# Create backup dataframe for manual testing
 NOTES_DF = get_titles(
-    NOTES_DF
+    NOTES_DF,
+    VERBOSE
 )
-
 
 # Tackle stop words/patterns
 # Create a copy of a dataframe to process further with regex
 NOTES_REG_DF = NOTES_DF.copy()
 
 # Implementation of pattern.txt file
-PATTERNS = read_txt(PATTERN_PTH, ENCODING)
+PATTERNS = read_txt(
+    PATTERN_PTH,
+    ENCODING,
+    VERBOSE
+)
 
-
-pats = prep_patterns(PATTERNS)
+pats = prep_patterns(
+    PATTERNS,
+    VERBOSE
+)
 
 # If user specifies so, drop outgoing links from the note so they are not
 # taken into account in finding nearest neighbors
@@ -239,9 +356,14 @@ if DROP_OLINKS:
 
 # Regex pattern matching and cleaning
 # Remove known not meaningful patterns
-def sub_patterns(patterns, field, df_):
+def sub_patterns(patterns, field, df_, v):
     """ Substitute passed patterns with ' '
+
     """
+
+    if v:
+        print('Removing known not meaningful patterns from notes')
+
     for pattern in patterns:
         df_[field] = (
             df_[field].apply(
@@ -251,7 +373,12 @@ def sub_patterns(patterns, field, df_):
     return df_
 
 
-NOTES_PROC = sub_patterns(pats, 'contents', NOTES_REG_DF)
+NOTES_PROC = sub_patterns(
+    pats,
+    'contents',
+    NOTES_REG_DF,
+    VERBOSE
+)
 
 
 # Build table for manual testing of text preprocessing before
@@ -262,12 +389,15 @@ cont_test = pd.merge(
     right_index=True,
     how='left'
 )
+if VERBOSE:
+    print('Built cont_test dataframe for manual testing in console env')
 
 
 ############################################
 # Model                                    #
 # Build notes vector representattion table #
-print('building vector representation')
+if VERBOSE:
+    print('Building vector representation')
 
 text = NOTES_PROC['contents']
 
@@ -277,11 +407,18 @@ MIN_DF = 1
 NORM = 'l2'
 NGRAM_RANGE = (1, 3)
 
+if VERBOSE:
+    print(f'Modeling vars: STOP_WORDS={STOP_WORDS}, MAX_DF={MAX_DF}, MIN_DF={MIN_DF}, NORM={NORM}, NGRAM_RANGE={NGRAM_RANGE}')
 
-def tfidf_vec(swords, mxdf, midf, nrm, nrange):
+
+def tfidf_vec(swords, mxdf, midf, nrm, nrange, v):
     """ TfidfVectorizer instatiate 
 
     """
+
+    if v:
+        print('Using TFIDF vectorizer')
+
     vectorizer = TfidfVectorizer(
         stop_words=swords,
         max_df=mxdf,
@@ -295,10 +432,14 @@ def tfidf_vec(swords, mxdf, midf, nrm, nrange):
     return vectorizer
 
 
-def count_vec(midf, nrange):
+def count_vec(midf, nrange, v):
     """ CountVectorizer instatiate
 
     """
+
+    if v:
+        print('Using Count vectorizer')
+
     vectorizer = CountVectorizer(
         min_df=midf,
         ngram_range=nrange,
@@ -310,21 +451,26 @@ def count_vec(midf, nrange):
 
 
 # Vectorizer depends on the distance method user wants to use
+if VERBOSE:
+    print(f'Apllied metric = {DISTANCE}')
+
 if DISTANCE == 'cosine':
     vectorizer = tfidf_vec(
         STOP_WORDS,
         MAX_DF,
         MIN_DF,
         NORM,
-        NGRAM_RANGE
+        NGRAM_RANGE,
+        VERBOSE
     )
 elif DISTANCE == 'jaccard':
     vectorizer = count_vec(
         MIN_DF,
-        NGRAM_RANGE
+        NGRAM_RANGE,
+        VERBOSE
     )
 else:
-    raise TypeError("Distance not recognized. Use: cosine ,jaccard")
+    raise TypeError("Distance not recognized. Use: cosine, jaccard")
 
 
 # Vectorize documents and processing
@@ -332,10 +478,10 @@ X = vectorizer.fit_transform(text)
 X_d = X.todense()
 X_d = np.asarray(X_d)
 if DISTANCE == 'jaccard':
-     X_d = np.array(X_d, dtype=bool)
+    X_d = np.array(X_d, dtype=bool)
 
 
-# We will use features list later on to catch what tokens were taken
+# We will use features list later to catch what tokens were taken
 # into the calculation
 FEATURES = vectorizer.get_feature_names_out()
 
@@ -346,16 +492,18 @@ MDF = pd.DataFrame(
     columns=FEATURES,
     index=NOTES_PROC['title']
 )
+if VERBOSE:
+    print('Constructed MDF helper dataframe')
 
 
 # Find nearest neighbors
-print('Find n nearest neighbors')
-
-
-def calc_neighbors(metric, nnum, data):
+def calc_neighbors(metric, nnum, data, v):
     """ wrap NearestNeighbors with given distance metric
 
     """
+
+    if v:
+        print(f'Calculating neighbors. NN={N_NUMBER}')
 
     nbrs = NearestNeighbors(
         n_neighbors=nnum+1,
@@ -369,7 +517,8 @@ def calc_neighbors(metric, nnum, data):
 NBRS = calc_neighbors(
     DISTANCE,
     N_NUMBER,
-    X_d
+    X_d,
+    VERBOSE
 )
 
 # Grab quantified distances for given indices
@@ -422,81 +571,11 @@ def show_nn(note_title, dropna=False):
     return sub_df
 
 
-#######################
-# CLUSTERING PART TBC #
-#######################
-
-# ## Find optimal number of clusters
-# print('finding optimal clusters')
-# def find_optimal_clusters(data, max_k):
-#     iters = range(2, max_k+1, 2)
-
-#     sse = []
-#     for k in iters:
-#         sse.append(MiniBatchKMeans(
-#             n_clusters=k,
-#             random_state=20
-#         ).fit(data).inertia_)
-
-#         print('Fit {} clusters'.format(k))
-
-#     f, ax = plt.subplots(1, 1)
-#     ax.plot(iters, sse, marker='o')
-#     ax.set_xlabel('Cluster Centers')
-#     ax.set_xticks(iters)
-#     ax.set_xticklabels(iters)
-#     ax.set_ylabel('SSE')
-#     ax.set_title('SSE by Cluster Center Plot')
-#     # f.show()
-
-# find_optimal_clusters(X, 20)
+if NOTE_TITLE is not None:
+    recommendations = show_nn(NOTE_TITLE).columns
+    for _ in recommendations:
+        print(_)
 
 
-# ## Clustering
-# cl_n = input('How many clusters do you want to use?: ')
-# clusters = MiniBatchKMeans(
-#     n_clusters=int(cl_n),
-#     random_state=20
-# ).fit_predict(X)
-
-# ## Dim reduction and plotting
-# print('Formin TSNE plot')
-# def plot_tsne_pca(data, labels):
-#     max_label = max(labels)
-#     max_items = np.random.choice(
-# range(data.shape[0]), size=50, replace=False)
-
-#     pca = PCA(n_components=2).fit_transform(data[max_items,:].todense())
-#     tsne = TSNE().fit_transform(
-# PCA(n_components=50).fit_transform(data[max_items,:].todense()))
-
-#     idx = np.random.choice(range(pca.shape[0]), size=5, replace=False)
-#     label_subset = labels[max_items]
-#     label_subset = [cm.hsv(i/max_label) for i in label_subset[idx]]
-
-#     f, ax = plt.subplots(1, 2, figsize=(14, 6))
-
-#     ax[0].scatter(pca[idx, 0], pca[idx, 1], c=label_subset)
-#     ax[0].set_title('PCA Cluster Plot')
-
-#     ax[1].scatter(tsne[idx, 0], tsne[idx, 1], c=label_subset)
-#     ax[1].set_title('TSNE Cluster Plot')
-
-#     f.show()
-
-# plot_tsne_pca(X, clusters)
-
-
-# # Getting top keywords
-# print('Getting top keywords')
-# def get_top_keywords(data, clusters, labels, n_terms):
-#     df = pd.DataFrame(data.todense()).groupby(clusters).mean()
-
-#     for i,r in df.iterrows():
-#         print('\nCluster {}'.format(i))
-#         print(','.join([labels[t] for t in np.argsort(r)[-n_terms:]]))
-
-# get_top_keywords(X, clusters, vectorizer.get_feature_names(), 10)
-
-
-print('TERMINATED')
+if VERBOSE:
+    print('\nTERMINATED')
