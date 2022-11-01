@@ -169,13 +169,16 @@ def prep_patterns(patterns, v):
 
     if v:
         print('Cleaning txt patterns')
+    
+    if patterns is not None:
+        reg = '\\n'
+        patterns_sub = re.sub(reg, ' ', patterns)
+        pats = patterns_sub.split(' ')
+        pats = [x for x in pats if x != '']
 
-    reg = '\\n'
-    patterns_sub = re.sub(reg, ' ', patterns)
-    pats = patterns_sub.split(' ')
-    pats = [x for x in pats if x != '']
+        return pats
 
-    return pats
+    return None
 
 
 def filter_ignore(df_, patterns, v):
@@ -256,7 +259,8 @@ ILIST = filter_ignore(
 )
 
 # Get rid of notes that contain path patterns from nnignore file
-NOTES_DF = NOTES_DF[~NOTES_DF.index.isin(ILIST[0])]
+if len(ILIST) != 0:
+    NOTES_DF = NOTES_DF[~NOTES_DF.index.isin(ILIST[0])]
 
 
 # Handle empty notes
@@ -347,11 +351,24 @@ pats = prep_patterns(
 
 # If user specifies so, drop outgoing links from the note so they are not
 # taken into account in finding nearest neighbors
-# TODO: put that into prep_patterns()
-if DROP_OLINKS:
-    OLINK_PAT = r'\[\[.*\]\]'
-    pats.append(OLINK_PAT)
-    assert OLINK_PAT in pats
+def drop_olinks(patterns, olink_flag):
+    """ Enrich exception patterns with outgoing link pattern if flag = True
+
+    """
+    if olink_flag:
+        olink_pat = r'\[\[.*\]\]'
+
+        if patterns is not None:
+            patterns.append(olink_pat)
+            return patterns
+
+        return [olink_pat]
+
+
+pats = drop_olinks(
+    pats,
+    DROP_OLINKS
+)
 
 
 # Regex pattern matching and cleaning
@@ -364,12 +381,15 @@ def sub_patterns(patterns, field, df_, v):
     if v:
         print('Removing known not meaningful patterns from notes')
 
-    for pattern in patterns:
-        df_[field] = (
-            df_[field].apply(
-                lambda x: re.sub(pattern, ' ', f'{x}')
+    if patterns is not None:
+        for pattern in patterns:
+            df_[field] = (
+                df_[field].apply(
+                    lambda x: re.sub(pattern, ' ', f'{x}')
+                )
             )
-        )
+        return df_
+
     return df_
 
 
@@ -558,6 +578,12 @@ def show_nn(note_title, dropna=False):
 
     df_ = pd.DataFrame(indices)
     nns = df_[df_[0] == i].values
+
+    if len(nns) == 0:
+        print('WARNING: Neighbor list for this note is empty.')
+        print('The note may be empty or too short or nnpatterns.txt wiped out its contents')
+        return None
+
     sub_df = MDF.iloc[nns[0]].T
 
     if dropna:
@@ -572,9 +598,11 @@ def show_nn(note_title, dropna=False):
 
 
 if NOTE_TITLE is not None:
-    recommendations = show_nn(NOTE_TITLE).columns
-    for _ in recommendations:
-        print(_)
+    recom_df = show_nn(NOTE_TITLE)
+
+    if recom_df is not None:
+        for _ in recom_df.columns:
+            print(_)
 
 
 if VERBOSE:

@@ -28,6 +28,7 @@ The script employs [Nearest Neighbors algorithm](https://scikit-learn.org/stable
 To use the script you need to have Python 3.10 and libraries specified in requirements.txt installed on your machine. If this is the case, then you can launch the script easily from CLI with ```python notes_neighbors.py```
 
 ### Setup:
+* The script lives in ```notes_neighbors.py```. Download it.
 * In order for the script to work correctly you need to define absolute path to your vault. You can do it under ```nnpath.txt``` saved in the same location as the script. The alternative is to provide it in the command line once prompted.
 * ```nnignore.txt``` allows you to define directories within your vault that should be excluded from the analysis.
 * ```nnpatterns.txt``` contains regular expression patterns that script should employ to get rid of the not meaningful phrases from your notes. As each vault is different, you probably should come up with your own list of patterns. You can also leave this file empty. 
