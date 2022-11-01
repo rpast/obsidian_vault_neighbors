@@ -41,7 +41,8 @@ This will return you 10 nearest neighbors to a note which title was passed after
 ```python vault_neighbors.py -t 'note of a title'``` 
 
 Sample output:
-<img src="static/sample_output.png" alt="graph" width="500"/>
+<br>
+<img src="static/sample_output.png" alt="graph">
 
 ### Python script arguments:
 You can control main parameters of the script like distance metric or number of recommendations with python script arguments. 
@@ -73,4 +74,5 @@ Below is a screnshoot of the ```python notes_neighbors.py --help```:
 ``` 
 
 ## Caveats
-The script has been tested Linux. 
+* The script has been tested Linux. 
+* It's performance was tested on a vault with ~500 notes: ```1.73 s ± 79.8 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)```
