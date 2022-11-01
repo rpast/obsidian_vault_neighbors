@@ -1,9 +1,21 @@
+""" Welcome to Vault Neighbors script!
+
+The script is intended to be run from CLI with predefined set of arguments.
+Run `python scriptname.py -h` to get help on possible options.
+
+The purpose of this script is to aid the creative process of note-taking in 
+Obsidian.md environment. By default it returns 10 nearest neighbors of a 
+given note. This serves as a recommendation of connections that can be formed
+between the notes. Thanks to that novel edges can be created.
+
+"""
+
 # TODO:
 # Accuracy measurement (current graph edges vs recommended neighbors)
 # 1.    Write function that returns all outlinks for a given note
 # 2.    Write function that compares outlinks with nns and spits out the score
 # show quantified distance between notes
-# return message if note not found
+
 
 import re
 import argparse
@@ -17,12 +29,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 
 # pd.set_option('display.max_rows', 500)
-pd.set_option('display.max_columns', 50)
+# pd.set_option('display.max_columns', 50)
 # pd.set_option('display.width', 1000)
+
 
 # Global parametrisation
 PARSER = argparse.ArgumentParser()
-# add optional script arguments
 
 enc = 'utf-8'
 de = False
@@ -30,7 +42,7 @@ do = False
 ipth = './nnignore.txt'
 ppth = './nnpatterns.txt'
 vpth = './nnpath.txt'
-dist = 'jaccard'
+dist = 'cosine'
 nn = 10
 verb = False
 t = None
@@ -73,7 +85,7 @@ PARSER.add_argument(
 )
 PARSER.add_argument(
     '-mt', '--metric',
-    help='Set distance metric for NN algorithm. Default \'jaccard\'. Available metrics: jaccard, cosine.',
+    help='Set distance metric for NN algorithm. Default \'cosine\'. Available metrics: jaccard, cosine.',
     type=str,
     default=dist
 )
@@ -123,7 +135,6 @@ if VERBOSE:
 def read_vault(pth, verbose=False):
     """Reads .md files under given path
 
-    TODO: allow user to exclude folders
     """
     if verbose:
         print(f'Parsing vault at {pth}')
@@ -169,7 +180,7 @@ def prep_patterns(patterns, v):
 
     if v:
         print('Cleaning txt patterns')
-    
+
     if patterns is not None:
         reg = '\\n'
         patterns_sub = re.sub(reg, ' ', patterns)
@@ -215,6 +226,7 @@ def filter_ignore(df_, patterns, v):
 if VERBOSE:
     print('### Notes recommendation script run. ###')
 
+
 # Set paths
 # Read vault path file. If no path defined, then ask user to provide it.
 VP = read_txt(
@@ -237,6 +249,7 @@ else:
         VAULT_PTH = Path(VAULT_STR)
     else:
         VAULT_PTH = Path(VP[0])
+
 
 # Read .md files located under given vault location
 NOTES_DF = read_vault(
@@ -326,8 +339,6 @@ NOTES_DF['contents'] = (
         NOTES_DF['contents']
         .str.lower()
 )
-
-
 NOTES_DF = get_titles(
     NOTES_DF,
     VERBOSE
@@ -343,14 +354,13 @@ PATTERNS = read_txt(
     ENCODING,
     VERBOSE
 )
-
 pats = prep_patterns(
     PATTERNS,
     VERBOSE
 )
 
 # If user specifies so, drop outgoing links from the note so they are not
-# taken into account in finding nearest neighbors
+# taken into nearest neighbors algorithm
 def drop_olinks(patterns, olink_flag):
     """ Enrich exception patterns with outgoing link pattern if flag = True
 
@@ -401,7 +411,7 @@ NOTES_PROC = sub_patterns(
 )
 
 
-# Build table for manual testing of text preprocessing before
+# Build table for manual testing of text preprocessing - before/after comparison
 cont_test = pd.merge(
     NOTES_PROC['contents'],
     NOTES_DF['contents'],
@@ -416,11 +426,13 @@ if VERBOSE:
 ############################################
 # Model                                    #
 # Build notes vector representattion table #
+
 if VERBOSE:
     print('Building vector representation')
 
 text = NOTES_PROC['contents']
 
+# Model specific parameters
 STOP_WORDS = 'english'
 MAX_DF = 0.99
 MIN_DF = 1
@@ -432,7 +444,7 @@ if VERBOSE:
 
 
 def tfidf_vec(swords, mxdf, midf, nrm, nrange, v):
-    """ TfidfVectorizer instatiate 
+    """ TfidfVectorizer instatiate
 
     """
 
@@ -546,24 +558,34 @@ distances, indices = NBRS.kneighbors(X_d)
 
 
 # Interface for NN query
-def find_index(title):
+def find_index(title, corpus):
     """Helper function to extract index from master table using given note title
 
     :param title: Obsidian note title
     :type title: str
-    :return: index number corresponding to a given title
+    :param corpus: Source table with processed notes
+    :type corpus: pd.DataFrame
+    :return: index number corresponding to a given title or None
     :rtype: int
     """
     tit = title.lower()
-    return NOTES_PROC[NOTES_PROC['title'] == tit].index[0]
+
+    note_query = corpus[corpus['title'] == tit]
+
+    if note_query.empty:
+        return None
+
+    return note_query.index[0]
 
 
-def show_nn(note_title, dropna=False):
+def show_nn(note_title, corpus, dropna=False):
     """Returns nearest neighbors dataframe for a given note. The table consists
     of neighbors titles, tokens used by the model and their corresponding values.
 
     :param note_title: title of the note for which user wants to extract nns
     :type note_title: str
+    :param corpus: Source table with processed notes
+    :type corpus: pd.DataFrame
     :param dropna: use this if you want to see only non-zero value tokens for
     at least one neighbor
     :type dropna: bool
@@ -573,10 +595,18 @@ def show_nn(note_title, dropna=False):
     """
 
     i = find_index(
-        note_title
+        note_title,
+        corpus
     )
 
     df_ = pd.DataFrame(indices)
+
+    # If note not found in corpus:
+    if i is None:
+        print("WARNING: Master note not found in the corpus.")
+        print('Check the title or if the note is empty.')
+        return None
+
     nns = df_[df_[0] == i].values
 
     if len(nns) == 0:
@@ -598,7 +628,10 @@ def show_nn(note_title, dropna=False):
 
 
 if NOTE_TITLE is not None:
-    recom_df = show_nn(NOTE_TITLE)
+    recom_df = show_nn(
+        NOTE_TITLE,
+        NOTES_PROC
+    )
 
     if recom_df is not None:
         for _ in recom_df.columns:
