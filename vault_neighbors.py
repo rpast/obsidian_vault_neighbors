@@ -1,4 +1,5 @@
 """ Welcome to Vault Neighbors script!
+v.1.0
 
 The script is intended to be run from CLI with predefined set of arguments.
 Run `python scriptname.py -h` to get help on possible options.
