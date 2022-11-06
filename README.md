@@ -76,3 +76,8 @@ Below is a screnshoot of the ```python notes_neighbors.py --help```:
 ## Caveats
 * The script has been tested Linux. 
 * It's performance was tested on a vault with ~500 notes: ```1.73 s ± 79.8 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)```
+
+## TODO
+
+- [ ] User can look-up the note contents to see how it got processed by the script
+- [ ] Accuracy metrics
