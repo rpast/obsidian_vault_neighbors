@@ -16,6 +16,7 @@ between the notes. Thanks to that novel edges can be created.
 # 1.    Write function that returns all outlinks for a given note
 # 2.    Write function that compares outlinks with nns and spits out the score
 # show quantified distance between notes
+# peek note content
 
 
 import re
@@ -47,10 +48,11 @@ dist = 'cosine'
 nn = 10
 verb = False
 t = None
+pk = False
 
 PARSER.add_argument(
     '-e', '--encoding',
-    help='Set encoding for vault notes. Default \'utf-8\'',
+    help=f'Set encoding for vault notes. Default {enc}',
     type=str,
     default=enc
 )
@@ -68,21 +70,9 @@ PARSER.add_argument(
 )
 PARSER.add_argument(
     '-ip', '--ignore_path',
-    help='Set path to nnignore.txt file. Default ./',
+    help=f'Set path to nnignore.txt file. Default {ipth}',
     type=str,
     default=ipth
-)
-PARSER.add_argument(
-    '-pp', '--pattern_path',
-    help='Set path to nnpatterns.txt. Default ./',
-    type=str,
-    default=ppth
-)
-PARSER.add_argument(
-    '-vp', '--vault_path',
-    help='Set path to nnpath.txt. Default ./',
-    type=str,
-    default=vpth
 )
 PARSER.add_argument(
     '-mt', '--metric',
@@ -97,16 +87,34 @@ PARSER.add_argument(
     default=nn
 )
 PARSER.add_argument(
-    '-v', '--verbose',
-    help='Make script output more verbose',
+    '-pp', '--pattern_path',
+    help=f'Set path to nnpatterns.txt. Default {ppth}',
+    type=str,
+    default=ppth
+)
+PARSER.add_argument(
+    '-pk', '--peek',
+    help='Show note content after it got processed by the script.',
     action='store_true',
-    default=verb
+    default=pk
 )
 PARSER.add_argument(
     '-t', '--title',
     help='Pass full note title for which you want to get nearest neighbors',
     type=str,
     default=t
+)
+PARSER.add_argument(
+    '-v', '--verbose',
+    help='Make script output more verbose',
+    action='store_true',
+    default=verb
+)
+PARSER.add_argument(
+    '-vp', '--vault_path',
+    help=f'Set path to nnpath.txt. Default {vpth}',
+    type=str,
+    default=vpth
 )
 
 ARGS = PARSER.parse_args()
@@ -123,6 +131,7 @@ V_PATH = ARGS.vault_path
 DISTANCE = ARGS.metric
 N_NUMBER = ARGS.neighbors_number
 VERBOSE = ARGS.verbose
+PEEK = ARGS.peek
 
 PARM_CONTAINER = [ENCODING, DROP_EMPTY, DROP_OLINKS, IGNORE_PTH, PATTERN_PTH,
                   V_PATH, DISTANCE, N_NUMBER, VERBOSE]
@@ -373,7 +382,7 @@ def drop_olinks(patterns, olink_flag):
             patterns.append(olink_pat)
             return patterns
 
-        return [olink_pat]
+    return patterns
 
 
 pats = drop_olinks(
@@ -637,6 +646,17 @@ if NOTE_TITLE is not None:
     if recom_df is not None:
         for _ in recom_df.columns:
             print(_)
+
+    # Define contents print when user wants to look it up
+    if PEEK:
+        idx = find_index(
+            NOTE_TITLE,
+            NOTES_PROC
+        )
+
+        print('\nNote contents after processing >>>')
+        print(NOTES_PROC.loc[idx]['contents'])
+        print('\n')
 
 
 if VERBOSE:
