@@ -51,26 +51,24 @@ Below is a screnshoot of the ```python notes_neighbors.py --help```:
 ```
   -h, --help            show this help message and exit
   -e ENCODING, --encoding ENCODING
-                        Set encoding for vault notes. Default 'utf-8'
-  -de, --drop_empty     Drop empty notes instead of filling them in with
-                        titles
+                        Set encoding for vault notes. Default utf-8
+  -de, --drop_empty     Drop empty notes instead of filling them in with titles
   -do, --drop_outlinks  Dont take outlinks into the nearest neighbors analysis
   -ip IGNORE_PATH, --ignore_path IGNORE_PATH
-                        Set path to nnignore.txt file. Default ./
-  -pp PATTERN_PATH, --pattern_path PATTERN_PATH
-                        Set path to nnpatterns.txt. Default ./
-  -vp VAULT_PATH, --vault_path VAULT_PATH
-                        Set path to nnpath.txt. Default ./
+                        Set path to nnignore.txt file. Default ./nnignore.txt
   -mt METRIC, --metric METRIC
-                        Set distance metric for NN algorithm. Default
-                        'cosine'. Available metrics: jaccard, cosine.
+                        Set distance metric for NN algorithm. Default 'cosine'. Available
+                        metrics: jaccard, cosine.
   -nn NEIGHBORS_NUMBER, --neighbors_number NEIGHBORS_NUMBER
-                        Set nearest neighbors number the script should return.
-                        Default 10.
-  -v, --verbose         Make script output more verbose
+                        Set nearest neighbors number the script should return. Default 10.
+  -pp PATTERN_PATH, --pattern_path PATTERN_PATH
+                        Set path to nnpatterns.txt. Default ./nnpatterns.txt
+  -pk, --peek           Show note content after it got processed by the script.
   -t TITLE, --title TITLE
-                        Pass full note title for which you want to get nearest
-                        neighbors
+                        Pass full note title for which you want to get nearest neighbors
+  -v, --verbose         Make script output more verbose
+  -vp VAULT_PATH, --vault_path VAULT_PATH
+                        Set path to nnpath.txt. Default ./nnpath.txt
 ``` 
 
 ## Caveats
@@ -79,5 +77,5 @@ Below is a screnshoot of the ```python notes_neighbors.py --help```:
 
 ## TODO
 
-- [ ] User can look-up the note contents to see how it got processed by the script
+- [x] User can look-up the note contents to see how it got processed by the script
 - [ ] Accuracy metrics
