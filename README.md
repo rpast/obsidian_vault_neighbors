@@ -34,7 +34,7 @@ Instalation of required libraries from _requirements.txt_:
 * Three .txt files saved in the same location as .py file allow for more detailed parametrization. Each parameter value in these files should start a new line.
   * In order for the script to work correctly you need to specify absolute path to your vault. You can do it under ```nnpath.txt```. The alternative is to provide it in the command line once prompted.
   * ```nnignore.txt``` allows you to define directories within your vault that should be excluded from the analysis.
-  * ```nnpatterns.txt``` contains regular expression patterns that script should employ to get rid of the non-meaningful phrases from your notes. As each vault is different, you probably should come up with your own list of patterns. You can also leave this file empty. 
+  * ```nnpatterns.txt``` contains regular expression patterns that script should employ to get rid of the non-meaningful phrases from your notes. As each vault is different, you probably should come up with your own list of patterns. You can also leave this file empty.
 
 ### Launching the script
 This will return you 10 nearest neighbors to a note which title was passed after -t argument:

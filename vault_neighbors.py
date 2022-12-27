@@ -150,7 +150,7 @@ def read_vault(pth, verbose=False):
         print(f'Parsing vault at {pth}')
 
     notes_paths = [
-        x for x in VAULT_PTH.rglob('*') if x.suffix == '.md'
+        x for x in pth.rglob('*') if x.suffix == '.md'
     ]
 
     # read each note
