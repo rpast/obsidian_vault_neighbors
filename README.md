@@ -38,7 +38,7 @@ Instalation of required libraries from _requirements.txt_:
 
 ### Launching the script
 This will return you 10 nearest neighbors to a note which title was passed after -t argument:
-```python vault_neighbors.py -t 'note of a title'``` 
+```python vault_neighbors.py -t 'title of the note'``` 
 
 Sample output:
 <br>
